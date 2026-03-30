@@ -38,6 +38,7 @@ export function migrate(sqlite: Database.Database) {
 			username TEXT NOT NULL DEFAULT '',
 			credential_encrypted TEXT NOT NULL DEFAULT '',
 			tls_verify INTEGER NOT NULL DEFAULT 0,
+			sunshine_scheme TEXT NOT NULL DEFAULT 'auto',
 			config_base_path TEXT NOT NULL DEFAULT '/opt/86box/configs',
 			binary_path TEXT NOT NULL DEFAULT '/usr/local/bin/86Box',
 			status TEXT NOT NULL DEFAULT 'unknown',
@@ -94,8 +95,18 @@ export function migrate(sqlite: Database.Database) {
 		);
 	`);
 
+	ensureStreamingHostColumns(sqlite);
+
 	seedDefaultAdmin(sqlite);
 	seedDefaultSettings(sqlite);
+}
+
+function ensureStreamingHostColumns(sqlite: Database.Database) {
+	const cols = sqlite.prepare('PRAGMA table_info(streaming_hosts)').all() as { name: string }[];
+	const names = new Set(cols.map((c) => c.name));
+	if (!names.has('sunshine_scheme')) {
+		sqlite.exec(`ALTER TABLE streaming_hosts ADD COLUMN sunshine_scheme TEXT NOT NULL DEFAULT 'auto'`);
+	}
 }
 
 function seedDefaultAdmin(sqlite: Database.Database) {

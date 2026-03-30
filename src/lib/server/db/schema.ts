@@ -32,6 +32,8 @@ export const streamingHosts = sqliteTable('streaming_hosts', {
 	/** Encrypted with SPHERE86_SECRET */
 	credentialEncrypted: text('credential_encrypted').notNull().default(''),
 	tlsVerify: integer('tls_verify', { mode: 'boolean' }).notNull().default(false),
+	/** API/Web UI: auto = try HTTPS then HTTP */
+	sunshineScheme: text('sunshine_scheme').notNull().default('auto'),
 	configBasePath: text('config_base_path').notNull().default('/opt/86box/configs'),
 	binaryPath: text('binary_path').notNull().default('/usr/local/bin/86Box'),
 	status: text('status', { enum: ['online', 'offline', 'unknown'] }).notNull().default('unknown'),

@@ -66,20 +66,22 @@ npm run dev
 Run the provisioning script on a fresh **Debian 12** or **Ubuntu 22.04+** VM:
 
 ```bash
-sudo bash scripts/provision-streaming-host.sh
+sudo bash scripts/sphere86_install_wizard.sh
 ```
 
-This installs 86Box, the ROM set, Sunshine, configures networking, and mounts the shared config directory. For other distributions, adapt the package installation commands accordingly.
+(`scripts/provision-streaming-host.sh` leitet nur noch auf den Wizard um.)
 
-### What the script does
+Der interaktive Wizard bietet u. a. **Neuinstallation**, **nur 86Box**, **nur Sunshine**, **nur Share**, **statische IP** sowie Tests und eine **Passed/Failed-Zusammenfassung**. ROMs werden **nicht** vom Skript geladen – Bereitstellung über das **Sphere86-Webpanel**.
 
-1. Installs X11, PulseAudio, and base tools
-2. Creates a dedicated user for 86Box
+### What the wizard can do
+
+1. Installs X11, PulseAudio, and base tools (full install)
+2. Creates a dedicated user for 86Box / Sunshine
 3. Optionally sets a static IP (Netplan)
-4. Downloads the latest 86Box binary and ROM set from GitHub
-5. Installs Sunshine from the LizardByte releases
+4. Downloads the latest 86Box binary from GitHub (ROM content via Sphere86 UI)
+5. Installs Sunshine from LizardByte, enables and starts `sphere86-sunshine.service` (autostart)
 6. Configures an NFS/SMB mount for shared configs
-7. Opens firewall ports for Sunshine/Moonlight
+7. Opens firewall ports for Sunshine/Moonlight (UFW if present)
 
 ### Local / Workstation Setup
 
@@ -122,7 +124,8 @@ src/
 │   ├── stores/                Svelte stores (theme, jobs)
 │   └── components/            Shared UI components
 scripts/
-    provision-streaming-host.sh
+    sphere86_install_wizard.sh
+    provision-streaming-host.sh  # legacy alias → wizard
 ```
 
 ## Security

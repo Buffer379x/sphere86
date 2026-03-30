@@ -13,7 +13,7 @@ import {
 	type MachineConfig
 } from '$lib/server/86box/config-generator.js';
 import { isHardwareDbAvailable, loadHardwareDb } from '$lib/server/86box/hardware-db.js';
-import { build86BoxCommand, type SunshineHost } from '$lib/server/sunshine/client.js';
+import { build86BoxCommand, parseSunshineScheme, type SunshineHost } from '$lib/server/sunshine/client.js';
 import * as sunshineClient from '$lib/server/sunshine/client.js';
 import { logAudit } from '$lib/server/audit.js';
 import { v4 as uuid } from 'uuid';
@@ -167,8 +167,12 @@ export const actions: Actions = {
 		const cmd = build86BoxCommand(host.binaryPath, configAbsPath);
 
 		const sunshineHost: SunshineHost = {
-			address: host.address, port: host.port, username: host.username,
-			credentialEncrypted: host.credentialEncrypted, tlsVerify: host.tlsVerify
+			address: host.address,
+			port: host.port,
+			username: host.username,
+			credentialEncrypted: host.credentialEncrypted,
+			tlsVerify: host.tlsVerify,
+			sunshineScheme: parseSunshineScheme(host.sunshineScheme)
 		};
 
 		try {

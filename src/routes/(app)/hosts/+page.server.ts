@@ -4,15 +4,28 @@ import { db } from '$lib/server/db/index.js';
 import { streamingHosts } from '$lib/server/db/schema.js';
 import { eq } from 'drizzle-orm';
 import { encrypt } from '$lib/server/crypto/index.js';
-import { testConnection, type SunshineHost } from '$lib/server/sunshine/client.js';
+import {
+	testConnection,
+	parseSunshineScheme,
+	type SunshineHost,
+	type SunshineScheme
+} from '$lib/server/sunshine/client.js';
 import { logAudit } from '$lib/server/audit.js';
 import { v4 as uuid } from 'uuid';
 import { isIPv6 } from 'node:net';
 
-function buildSunshineOpenUrl(host: { address: string; port: number }): string {
+/** Browser link: explicit HTTPS/HTTP; Auto uses HTTP (typical LAN Sunshine without TLS). */
+function schemeForOpenLink(scheme: SunshineScheme): 'http' | 'https' {
+	if (scheme === 'https') return 'https';
+	if (scheme === 'http') return 'http';
+	return 'http';
+}
+
+function buildSunshineOpenUrl(host: { address: string; port: number; sunshineScheme?: string | null }): string {
 	const raw = host.address.trim();
 	const hostname = isIPv6(raw) ? `[${raw}]` : raw;
-	return `https://${hostname}:${host.port}/`;
+	const sch = schemeForOpenLink(parseSunshineScheme(host.sunshineScheme));
+	return `${sch}://${hostname}:${host.port}/`;
 }
 
 export const load: PageServerLoad = async () => {
@@ -33,6 +46,7 @@ export const actions: Actions = {
 		const username = data.get('username')?.toString().trim() || 'admin';
 		const password = data.get('password')?.toString() || '';
 		const tlsVerify = data.get('tlsVerify') === 'on';
+		const sunshineScheme = parseSunshineScheme(data.get('sunshineScheme')?.toString());
 		const configBasePath = data.get('configBasePath')?.toString().trim() || '/opt/86box/configs';
 		const binaryPath = data.get('binaryPath')?.toString().trim() || '/usr/local/bin/86Box';
 
@@ -46,7 +60,7 @@ export const actions: Actions = {
 		await db.insert(streamingHosts).values({
 			id, name, address, port, username,
 			credentialEncrypted: encrypt(password),
-			tlsVerify, configBasePath, binaryPath,
+			tlsVerify, sunshineScheme, configBasePath, binaryPath,
 			status: 'unknown', createdAt: now, updatedAt: now
 		});
 
@@ -77,7 +91,8 @@ export const actions: Actions = {
 			port: host.port,
 			username: host.username,
 			credentialEncrypted: host.credentialEncrypted,
-			tlsVerify: host.tlsVerify
+			tlsVerify: host.tlsVerify,
+			sunshineScheme: parseSunshineScheme(host.sunshineScheme)
 		};
 
 		const result = await testConnection(sunshineHost);
@@ -106,6 +121,7 @@ export const actions: Actions = {
 		const username = data.get('username')?.toString().trim() || 'admin';
 		const password = data.get('password')?.toString();
 		const tlsVerify = data.get('tlsVerify') === 'on';
+		const sunshineScheme = parseSunshineScheme(data.get('sunshineScheme')?.toString());
 		const configBasePath = data.get('configBasePath')?.toString().trim() || '/opt/86box/configs';
 		const binaryPath = data.get('binaryPath')?.toString().trim() || '/usr/local/bin/86Box';
 
@@ -114,7 +130,7 @@ export const actions: Actions = {
 		}
 
 		const updateData: Record<string, unknown> = {
-			name, address, port, username, tlsVerify, configBasePath, binaryPath,
+			name, address, port, username, tlsVerify, sunshineScheme, configBasePath, binaryPath,
 			updatedAt: new Date().toISOString()
 		};
 

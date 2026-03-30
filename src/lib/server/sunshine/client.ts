@@ -1,4 +1,12 @@
 import { decrypt } from '../crypto/index.js';
+import { Agent } from 'undici';
+
+export type SunshineScheme = 'auto' | 'http' | 'https';
+
+export function parseSunshineScheme(raw: string | null | undefined): SunshineScheme {
+	if (raw === 'http' || raw === 'https' || raw === 'auto') return raw;
+	return 'auto';
+}
 
 export interface SunshineHost {
 	address: string;
@@ -6,6 +14,8 @@ export interface SunshineHost {
 	username: string;
 	credentialEncrypted: string;
 	tlsVerify: boolean;
+	/** Default `auto`: try HTTPS first, then HTTP (LAN installs often use HTTP only). */
+	sunshineScheme?: SunshineScheme;
 }
 
 export interface SunshineApp {
@@ -21,52 +31,77 @@ interface SunshineAppsResponse {
 	apps: SunshineApp[];
 }
 
-function baseUrl(host: SunshineHost): string {
-	return `https://${host.address}:${host.port}`;
+class SunshineHttpError extends Error {
+	constructor(message: string) {
+		super(message);
+		this.name = 'SunshineHttpError';
+	}
+}
+
+function schemesToTry(host: SunshineHost): ('http' | 'https')[] {
+	const s = host.sunshineScheme ?? 'auto';
+	if (s === 'http') return ['http'];
+	if (s === 'https') return ['https'];
+	return ['https', 'http'];
 }
 
 function authHeaders(host: SunshineHost): HeadersInit {
 	const password = decrypt(host.credentialEncrypted);
 	const credentials = Buffer.from(`${host.username}:${password}`).toString('base64');
 	return {
-		'Authorization': `Basic ${credentials}`,
+		Authorization: `Basic ${credentials}`,
 		'Content-Type': 'application/json'
 	};
 }
 
 async function request<T>(host: SunshineHost, path: string, options: RequestInit = {}): Promise<T> {
-	const url = `${baseUrl(host)}${path}`;
+	const trySchemes = schemesToTry(host);
+	let lastErr: Error | null = null;
 
-	const fetchOptions: RequestInit = {
-		...options,
-		headers: {
-			...authHeaders(host),
-			...options.headers
+	for (const scheme of trySchemes) {
+		const url = `${scheme}://${host.address}:${host.port}${path}`;
+		const fetchOptions: RequestInit = {
+			...options,
+			headers: {
+				...authHeaders(host),
+				...options.headers
+			}
+		};
+
+		if (scheme === 'https' && !host.tlsVerify) {
+			(fetchOptions as { dispatcher?: Agent }).dispatcher = new Agent({
+				connect: { rejectUnauthorized: false }
+			});
 		}
-	};
 
-	// Handle self-signed certificates
-	if (!host.tlsVerify) {
-		(fetchOptions as any).dispatcher = undefined; // Node fetch handles this via env
+		try {
+			const response = await fetch(url, fetchOptions);
+
+			if (!response.ok) {
+				const text = await response.text().catch(() => '');
+				throw new SunshineHttpError(`Sunshine API ${response.status}: ${text || response.statusText}`);
+			}
+
+			const contentType = response.headers.get('content-type');
+			if (contentType?.includes('application/json')) {
+				return response.json() as Promise<T>;
+			}
+			return response.text() as unknown as T;
+		} catch (err) {
+			if (err instanceof SunshineHttpError) {
+				throw err;
+			}
+			lastErr = err instanceof Error ? err : new Error(String(err));
+			continue;
+		}
 	}
 
-	const response = await fetch(url, fetchOptions);
-
-	if (!response.ok) {
-		const text = await response.text().catch(() => '');
-		throw new Error(`Sunshine API ${response.status}: ${text || response.statusText}`);
-	}
-
-	const contentType = response.headers.get('content-type');
-	if (contentType?.includes('application/json')) {
-		return response.json() as Promise<T>;
-	}
-	return response.text() as unknown as T;
+	throw lastErr ?? new Error('fetch failed');
 }
 
 export async function testConnection(host: SunshineHost): Promise<{ ok: boolean; version?: string; error?: string }> {
 	try {
-		const apps = await request<SunshineAppsResponse>(host, '/api/apps');
+		await request<SunshineAppsResponse>(host, '/api/apps');
 		return { ok: true, version: 'connected' };
 	} catch (err) {
 		return { ok: false, error: err instanceof Error ? err.message : 'Unknown error' };
@@ -79,20 +114,20 @@ export async function getApps(host: SunshineHost): Promise<SunshineApp[]> {
 }
 
 export async function addApp(host: SunshineHost, app: { name: string; cmd: string; workingDir?: string }): Promise<void> {
-	const body = {
+	const body: Record<string, string | number> = {
 		name: app.name,
 		output: '',
 		cmd: app.cmd,
 		index: -1,
 		'exclude-global-prep-cmd': 'false',
-		'elevated': 'false',
+		elevated: 'false',
 		'auto-detach': 'true',
 		'wait-all': 'true',
 		'exit-timeout': '5'
 	};
 
 	if (app.workingDir) {
-		(body as any)['working-dir'] = app.workingDir;
+		body['working-dir'] = app.workingDir;
 	}
 
 	await request(host, '/api/apps', {
@@ -102,7 +137,7 @@ export async function addApp(host: SunshineHost, app: { name: string; cmd: strin
 }
 
 export async function deleteApp(host: SunshineHost, index: number): Promise<void> {
-	await request(host, '/api/apps/${index}', { method: 'DELETE' });
+	await request(host, `/api/apps/${index}`, { method: 'DELETE' });
 }
 
 export async function getConfig(host: SunshineHost): Promise<Record<string, string>> {

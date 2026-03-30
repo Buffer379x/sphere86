@@ -178,6 +178,22 @@
 							   placeholder="47990" value={editing?.port ?? 47990} />
 					</div>
 					<div>
+						<label for="sunshineScheme" class="label">Sunshine API URL scheme</label>
+						<select
+							id="sunshineScheme"
+							name="sunshineScheme"
+							class="input-field"
+							value={editing?.sunshineScheme ?? 'auto'}
+						>
+							<option value="auto">Auto (HTTPS first, then HTTP)</option>
+							<option value="http">HTTP only</option>
+							<option value="https">HTTPS only</option>
+						</select>
+						<p class="text-xs mt-1" style="color: var(--theme-on-surface-variant);">
+							Use Auto or HTTP only when Sunshine is reachable without TLS (typical on a LAN).
+						</p>
+					</div>
+					<div>
 						<label for="username" class="label">Username</label>
 						<input id="username" name="username" type="text" class="input-field"
 							   placeholder="admin" value={editing?.username ?? 'admin'} />
