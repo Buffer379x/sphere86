@@ -165,7 +165,7 @@ export const actions: Actions = {
 
 		const configAbsPath = join(host.configBasePath, profile.deployPath);
 		const romAbsPath = join(host.configBasePath, 'roms');
-		const cmd = build86BoxCommand(host.binaryPath, configAbsPath, romAbsPath);
+		const cmd = build86BoxCommand(host.binaryPath, configAbsPath, romAbsPath, host.x11Display);
 
 		const sunshineHost: SunshineHost = {
 			address: host.address,

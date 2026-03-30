@@ -42,19 +42,53 @@ setup_install_log_tee() {
 }
 
 # Optional delayed reboot (background). Cancel with: kill <PID>  (PID is printed).
-# Non-interactive: SPHERE86_POST_REBOOT_SEC=300
+# Non-interactive: SPHERE86_POST_REBOOT_SEC=300 (skips "Press Enter" before scheduling if set)
 prompt_optional_reboot() {
 	local sec="${SPHERE86_POST_REBOOT_SEC:-}"
 	if [[ -z "$sec" ]]; then
 		echo ""
-		read -rp "Schedule automatic reboot in the background (e.g. if noVNC/console stays black after upgrades)? Seconds, 0 = no [0]: " sec
+		read -rp "Schedule automatic reboot in the background (e.g. if noVNC/console stays black)? Seconds, 0 = no [0]: " sec
 	fi
 	sec="${sec:-0}"
 	[[ "$sec" =~ ^[0-9]+$ ]] || return 0
 	[[ "$sec" -gt 0 ]] || return 0
+	if [[ -z "${SPHERE86_POST_REBOOT_SEC:-}" ]]; then
+		read -rp "Press Enter to start the ${sec}s reboot countdown (Ctrl+C aborts only this prompt; the install is already saved): " _
+	fi
 	( sleep "$sec" && /sbin/reboot ) &
 	local _rb_pid=$!
 	ok "Reboot scheduled in ${sec}s (background PID ${_rb_pid}). To cancel: kill ${_rb_pid}"
+}
+
+# After the summary: LightDM restart switches the graphical session to BOX_USER (auto-login) and disconnects noVNC.
+# Set SPHERE86_SKIP_LIGHTDM_RESTART=1 to skip (e.g. automation). Apply later: sudo systemctl restart lightdm
+prompt_apply_lightdm_restart() {
+	if [[ "${SPHERE86_SKIP_LIGHTDM_RESTART:-}" == "1" ]]; then
+		warn "SPHERE86_SKIP_LIGHTDM_RESTART=1: not restarting LightDM. Run later: sudo systemctl restart lightdm"
+		return 0
+	fi
+	if ! command -v lightdm &>/dev/null && [[ ! -x /usr/sbin/lightdm ]]; then
+		return 0
+	fi
+	echo ""
+	log "=========================================="
+	log "  Display session (read before continuing)"
+	log "=========================================="
+	warn "The install summary and log above are complete."
+	warn "Restarting LightDM will end the current graphical session (noVNC/KVM console) and start auto-login as: $BOX_USER"
+	read -rp "Press Enter to restart LightDM now, or type 'skip' to keep the current session (config is already saved): " _ldm
+	if [[ "${_ldm,,}" == "skip" ]]; then
+		warn "Skipped LightDM restart. To apply auto-login later: sudo systemctl restart lightdm"
+		return 0
+	fi
+	restart_lightdm_for_autologin
+}
+
+restart_lightdm_for_autologin() {
+	log "Restarting LightDM..."
+	systemctl restart lightdm 2>/dev/null || true
+	sleep 3
+	ok "LightDM restart requested (you may need to reconnect noVNC)."
 }
 
 # --- Summary (Passed / Failed) ----------------------------------------------
@@ -109,6 +143,8 @@ SMB_DOMAIN="${SMB_DOMAIN:-}"
 SUNSHINE_PASS="${SUNSHINE_PASS:-sunshine}"
 STATIC_IP="${STATIC_IP:-}"
 BOX_PASS="${BOX_PASS:-sphere86}"
+# Must match the active X11 session (see echo $DISPLAY on the desktop). Often :0; multi-seat / some VMs use :1, :2.0, …
+SUNSHINE_DISPLAY="${SUNSHINE_DISPLAY:-:0}"
 
 save_install_conf() {
 	mkdir -p "$SPHERE86_CONF_DIR"
@@ -118,6 +154,7 @@ save_install_conf() {
 HOSTNAME_INPUT=$HOSTNAME_INPUT
 BOX_USER=$BOX_USER
 SUNSHINE_UI_USER=$SUNSHINE_UI_USER
+SUNSHINE_DISPLAY=$SUNSHINE_DISPLAY
 CONFIG_PATH=$CONFIG_PATH
 SHARE_ADDR=$SHARE_ADDR
 SHARE_TYPE=$SHARE_TYPE
@@ -176,12 +213,13 @@ ensure_user() {
 }
 
 # LightDM: auto-login so an X session (and virtual monitor for Sunshine) exists at boot without manual login.
-configure_lightdm_autologin() {
+# Does not restart LightDM — that disconnects noVNC before the user can read the install summary; use prompt_apply_lightdm_restart after tests.
+configure_lightdm_autologin_config() {
 	if ! command -v lightdm &>/dev/null && [[ ! -x /usr/sbin/lightdm ]]; then
 		warn "LightDM not installed; skipping auto-login (install desktop stack via full install first)."
 		return 0
 	fi
-	log "Configuring LightDM auto-login for $BOX_USER..."
+	log "Configuring LightDM auto-login for $BOX_USER (restart deferred until after summary)..."
 	mkdir -p /etc/lightdm/lightdm.conf.d
 	cat > /etc/lightdm/lightdm.conf.d/50-sphere86-autologin.conf <<LIDM
 # Sphere86: graphical session must be active for Sunshine/Moonlight (no physical monitor required).
@@ -191,8 +229,6 @@ autologin-user-timeout=0
 user-session=xfce
 LIDM
 	systemctl enable lightdm 2>/dev/null || true
-	systemctl restart lightdm 2>/dev/null || true
-	sleep 3
 }
 
 # Allow user@ services / runtime dirs without an active SSH login (optional but helps).
@@ -331,8 +367,18 @@ SUNCONF
 	fi
 }
 
+# Map DISPLAY=:2.0 → /tmp/.X11-unix/X2 (not always X0).
+x11_socket_for_display() {
+	local d="${1:-:0}"
+	d="${d#:}"
+	local n="${d%%.*}"
+	echo "/tmp/.X11-unix/X${n}"
+}
+
 write_sunshine_systemd() {
-	local sunshine_bin box_uid
+	local sunshine_bin box_uid xsock disp
+	disp="${SUNSHINE_DISPLAY:-:0}"
+	xsock="$(x11_socket_for_display "$disp")"
 	sunshine_bin="$(command -v sunshine || true)"
 	if [[ -z "$sunshine_bin" ]]; then
 		err "Sunshine binary not found in PATH."
@@ -344,20 +390,20 @@ write_sunshine_systemd() {
 Description=Sunshine (Sphere86)
 After=network-online.target display-manager.service
 Wants=network-online.target
-# Wait for LightDM so :0 and ~/.Xauthority exist for the auto-logged-in user.
+# Wait for LightDM so the X socket and ~/.Xauthority exist for the auto-logged-in user.
 
 [Service]
 Type=simple
 User=$BOX_USER
 Group=$BOX_USER
 WorkingDirectory=/home/$BOX_USER
-# Wait until X11 socket exists (autologin session); avoids "no monitor" until manual login.
-ExecStartPre=/bin/bash -c 'for i in \$(seq 1 120); do [[ -S /tmp/.X11-unix/X0 ]] && exit 0; sleep 1; done; echo "X11 socket not ready"; exit 1'
+# Wait until the X11 socket for SUNSHINE_DISPLAY exists (see x11_socket_for_display).
+ExecStartPre=/bin/bash -c 'for i in \$(seq 1 120); do [[ -S $xsock ]] && exit 0; sleep 1; done; echo "X11 socket not ready for DISPLAY=$disp ($xsock)"; exit 1'
 ExecStart=$sunshine_bin
 Restart=on-failure
 RestartSec=5
 Environment=HOME=/home/$BOX_USER
-Environment=DISPLAY=:0
+Environment=DISPLAY=$disp
 Environment=XAUTHORITY=/home/$BOX_USER/.Xauthority
 Environment=XDG_RUNTIME_DIR=/run/user/${box_uid}
 
@@ -394,6 +440,10 @@ setup_share_mount() {
 			err "SMB path must look like //server/share[/subpath]. Received: $SHARE_ADDR"
 			return 1
 		fi
+		# Numeric uid/gid — more reliable across CIFS versions than uid=username.
+		local box_uid box_gid
+		box_uid="$(id -u "$BOX_USER")"
+		box_gid="$(id -g "$BOX_USER")"
 		local CREDS_FILE="/etc/sphere86-smb-creds"
 		if [[ -n "$SMB_USER" ]]; then
 			cat > "$CREDS_FILE" <<CREDS
@@ -402,14 +452,24 @@ password=$SMB_PASS
 CREDS
 			[[ -n "$SMB_DOMAIN" ]] && echo "domain=$SMB_DOMAIN" >> "$CREDS_FILE"
 			chmod 600 "$CREDS_FILE"
-			echo "$SMB_SOURCE $CONFIG_PATH cifs credentials=$CREDS_FILE,uid=$BOX_USER,gid=$BOX_USER,dir_mode=0775,file_mode=0664,vers=3.0,nofail,_netdev 0 0" >> /etc/fstab
+			echo "$SMB_SOURCE $CONFIG_PATH cifs credentials=$CREDS_FILE,uid=$box_uid,gid=$box_gid,dir_mode=0775,file_mode=0664,rw,vers=3.0,nofail,_netdev 0 0" >> /etc/fstab
 		else
-			echo "$SMB_SOURCE $CONFIG_PATH cifs guest,uid=$BOX_USER,gid=$BOX_USER,dir_mode=0775,file_mode=0664,vers=3.0,nofail,_netdev 0 0" >> /etc/fstab
+			echo "$SMB_SOURCE $CONFIG_PATH cifs guest,uid=$box_uid,gid=$box_gid,dir_mode=0775,file_mode=0664,rw,vers=3.0,nofail,_netdev 0 0" >> /etc/fstab
 		fi
 		mount -a || return 1
 	else
 		echo "$SHARE_ADDR $CONFIG_PATH nfs defaults,nofail,_netdev 0 0" >> /etc/fstab
 		mount -a || return 1
+	fi
+
+	# If the share is read-only on the server (wrong SMB ACL), 86Box cannot write cfg/log and Moonlight will fail.
+	local _testf="$CONFIG_PATH/.sphere86-write-test"
+	rm -f "$_testf" 2>/dev/null || true
+	if sudo -u "$BOX_USER" touch "$_testf" 2>/dev/null; then
+		rm -f "$_testf"
+		ok "Verified write access to $CONFIG_PATH as $BOX_USER"
+	else
+		warn "Cannot create a file in $CONFIG_PATH as $BOX_USER — check NAS/share permissions for this SMB user (Windows Explorer may use different credentials than Linux mount)."
 	fi
 }
 
@@ -532,6 +592,13 @@ prompt_sunshine_web_ui() {
 	echo ""
 }
 
+prompt_x11_display() {
+	echo ""
+	log "X11 DISPLAY for Sunshine / 86Box (must match the desktop — on the host run: echo \$DISPLAY in a graphical terminal)"
+	read -rp "DISPLAY [:0]: " SUNSHINE_DISPLAY
+	SUNSHINE_DISPLAY="${SUNSHINE_DISPLAY:-:0}"
+}
+
 prompt_full_config() {
 	echo ""
 	log "Full installation - input values"
@@ -539,6 +606,7 @@ prompt_full_config() {
 	HOSTNAME_INPUT="${HOSTNAME_INPUT:-streaming-host}"
 	prompt_linux_account
 	prompt_sunshine_web_ui
+	prompt_x11_display
 	read -rp "Static IP (leave blank for DHCP): " STATIC_IP
 	read -rp "Config mount path [/opt/86box/configs]: " CONFIG_PATH
 	CONFIG_PATH="${CONFIG_PATH:-/opt/86box/configs}"
@@ -581,11 +649,16 @@ prompt_minimal_user() {
 
 prompt_sunshine_only() {
 	if load_install_conf; then
-		log "Using install.conf: BOX_USER=$BOX_USER"
+		log "Using install.conf: BOX_USER=$BOX_USER SUNSHINE_DISPLAY=$SUNSHINE_DISPLAY"
 	else
 		prompt_linux_account
 	fi
 	prompt_sunshine_web_ui
+	if load_install_conf; then
+		:
+	else
+		prompt_x11_display
+	fi
 }
 
 prompt_smb_only() {
@@ -641,7 +714,7 @@ do_full_install() {
 		apply_static_ip && wizard_add "Apply static IP $STATIC_IP" 0 || wizard_add "Apply static IP" 1
 	fi
 
-	configure_lightdm_autologin && wizard_add "LightDM auto-login (X session for Moonlight)" 0 || wizard_add "LightDM auto-login" 1
+	configure_lightdm_autologin_config && wizard_add "LightDM auto-login configured (restart pending)" 0 || wizard_add "LightDM auto-login" 1
 	enable_user_linger && wizard_add "logind linger for $BOX_USER" 0 || wizard_add "logind linger" 1
 
 	install_86box_binary && wizard_add "Install 86Box" 0 || wizard_add "Install 86Box" 1
@@ -664,6 +737,7 @@ do_full_install() {
 	log "Sunshine UI: https://$(hostname -I 2>/dev/null | awk '{print $1}'):47990"
 
 	run_tests_for_mode full
+	prompt_apply_lightdm_restart
 	prompt_optional_reboot
 }
 
@@ -681,13 +755,14 @@ do_sunshine_only() {
 	wizard_reset
 	prompt_sunshine_only
 	ensure_user || true
-	configure_lightdm_autologin && wizard_add "LightDM auto-login (X session for Moonlight)" 0 || wizard_add "LightDM auto-login" 1
+	configure_lightdm_autologin_config && wizard_add "LightDM auto-login configured (restart pending)" 0 || wizard_add "LightDM auto-login" 1
 	enable_user_linger && wizard_add "logind linger for $BOX_USER" 0 || wizard_add "logind linger" 1
 	install_sunshine_deb && wizard_add "Install Sunshine package" 0 || wizard_add "Install Sunshine package" 1
 	configure_sunshine_files && wizard_add "Configure Sunshine files" 0 || wizard_add "Configure Sunshine files" 1
 	write_sunshine_systemd && wizard_add "Sunshine service + autostart" 0 || wizard_add "Sunshine service + autostart" 1
 	save_install_conf
 	run_tests_for_mode sunshine
+	prompt_apply_lightdm_restart
 	prompt_optional_reboot
 }
 

@@ -221,6 +221,14 @@
 						<input id="binaryPath" name="binaryPath" type="text" class="input-field"
 							   placeholder="/usr/local/bin/86Box" value={editing?.binaryPath ?? '/usr/local/bin/86Box'} />
 					</div>
+					<div class="md:col-span-2">
+						<label for="x11Display" class="label">X11 DISPLAY (streaming host)</label>
+						<input id="x11Display" name="x11Display" type="text" class="input-field"
+							   placeholder=":0" value={editing?.x11Display ?? ':0'} />
+						<p class="text-xs mt-1" style="color: var(--theme-on-surface-variant);">
+							Must match the desktop session on the host (run <span class="font-mono">echo $DISPLAY</span> in a terminal there). Use <span class="font-mono">:2.0</span> if it is not <span class="font-mono">:0</span> — otherwise 86Box and Sunshine can show a black screen.
+						</p>
+					</div>
 					<div class="pt-5">
 						<ToggleSwitch
 							id="tlsVerify"

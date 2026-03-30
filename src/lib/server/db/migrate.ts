@@ -107,6 +107,9 @@ function ensureStreamingHostColumns(sqlite: Database.Database) {
 	if (!names.has('sunshine_scheme')) {
 		sqlite.exec(`ALTER TABLE streaming_hosts ADD COLUMN sunshine_scheme TEXT NOT NULL DEFAULT 'auto'`);
 	}
+	if (!names.has('x11_display')) {
+		sqlite.exec(`ALTER TABLE streaming_hosts ADD COLUMN x11_display TEXT NOT NULL DEFAULT ':0'`);
+	}
 }
 
 function seedDefaultAdmin(sqlite: Database.Database) {
