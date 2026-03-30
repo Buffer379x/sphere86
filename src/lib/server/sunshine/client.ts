@@ -130,12 +130,16 @@ export async function getApps(host: SunshineHost): Promise<SunshineApp[]> {
 	return result.apps || [];
 }
 
-export async function addApp(host: SunshineHost, app: { name: string; cmd: string; workingDir?: string }): Promise<void> {
+/** POST /api/apps — `index: -1` creates a new entry; a non-negative index updates that app (Sunshine has no separate PUT). */
+export async function saveSunshineApp(
+	host: SunshineHost,
+	app: { name: string; cmd: string; workingDir?: string; index: number }
+): Promise<void> {
 	const body: Record<string, string | number | boolean> = {
 		name: app.name,
 		output: '',
 		cmd: app.cmd,
-		index: -1,
+		index: app.index,
 		'exclude-global-prep-cmd': false,
 		elevated: false,
 		/** If true, Sunshine treats a process that exits with 0 within 5s as a detached “success” (hardcoded in Sunshine process.cpp). Set false so an early 86Box exit is not masked. */
@@ -152,6 +156,31 @@ export async function addApp(host: SunshineHost, app: { name: string; cmd: strin
 		method: 'POST',
 		body: JSON.stringify(body)
 	});
+}
+
+export async function addApp(host: SunshineHost, app: { name: string; cmd: string; workingDir?: string }): Promise<void> {
+	await saveSunshineApp(host, { ...app, index: -1 });
+}
+
+function appListIndex(app: SunshineApp | undefined): number | null {
+	if (app == null) return null;
+	const i = app.index;
+	return typeof i === 'number' && !Number.isNaN(i) ? i : null;
+}
+
+/** Find Sunshine app list index for updating an existing published app. */
+export function resolveSunshineAppIndex(
+	apps: SunshineApp[],
+	opts: { linkAppName?: string; preferredName: string; deployPathSegment: string }
+): number | null {
+	const { linkAppName, preferredName, deployPathSegment } = opts;
+	if (linkAppName) {
+		const idx = appListIndex(apps.find((a) => a.name === linkAppName));
+		if (idx !== null) return idx;
+	}
+	const idx2 = appListIndex(apps.find((a) => a.name === preferredName));
+	if (idx2 !== null) return idx2;
+	return appListIndex(apps.find((a) => (a.cmd || '').includes(deployPathSegment)));
 }
 
 export async function deleteApp(host: SunshineHost, index: number): Promise<void> {
@@ -174,15 +203,18 @@ export function normalizeX11Display(raw: string | null | undefined): string {
  * Build the 86Box launch command for a Sunshine app (paths absolute on the streaming host).
  * - `-R` / `--rompath` and `-C` / `--config` are official 86Box flags (see 86Box `src/86box.c` help text).
  * - `-L` writes the 86Box log next to the VM config so you can inspect failures on the streaming host.
+ * - `-F` / `--fullscreen` starts in fullscreen (typical for Moonlight).
  * - `x11Display` must match the active X session (`echo $DISPLAY` on the host), same as Sunshine's systemd `Environment=DISPLAY=`.
  */
 export function build86BoxCommand(
 	binaryPath: string,
 	configAbsolutePath: string,
 	romAbsolutePath: string,
-	x11Display = ':0'
+	x11Display = ':0',
+	startFullscreen = true
 ): string {
 	const display = normalizeX11Display(x11Display);
 	const logPath = join(dirname(configAbsolutePath), '86box-sphere86.log');
-	return `env DISPLAY=${display} QT_QPA_PLATFORM=xcb XAUTHORITY="\${XAUTHORITY:-$HOME/.Xauthority}" "${binaryPath}" -R "${romAbsolutePath}" -C "${configAbsolutePath}" -L "${logPath}"`;
+	const fsFlag = startFullscreen ? ' -F' : '';
+	return `env DISPLAY=${display} QT_QPA_PLATFORM=xcb XAUTHORITY="\${XAUTHORITY:-$HOME/.Xauthority}" "${binaryPath}" -R "${romAbsolutePath}" -C "${configAbsolutePath}" -L "${logPath}"${fsFlag}`;
 }

@@ -525,10 +525,11 @@
 								<button
 									type="submit"
 									class="btn-primary text-xs py-1 px-3"
-									disabled={!!link}
-									title={link ? 'Already published — manage in Sunshine Applications' : 'Publish to Sunshine'}
+									title={link
+										? 'Push the current launch command to Sunshine again (e.g. after host or fullscreen settings change)'
+										: 'Register this VM as a Sunshine application'}
 								>
-									{link ? 'Published' : 'Publish'}
+									{link ? 'Re-publish' : 'Publish'}
 								</button>
 							</form>
 							<button

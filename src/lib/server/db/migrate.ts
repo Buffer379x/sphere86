@@ -110,6 +110,9 @@ function ensureStreamingHostColumns(sqlite: Database.Database) {
 	if (!names.has('x11_display')) {
 		sqlite.exec(`ALTER TABLE streaming_hosts ADD COLUMN x11_display TEXT NOT NULL DEFAULT ':0'`);
 	}
+	if (!names.has('box86_start_fullscreen')) {
+		sqlite.exec(`ALTER TABLE streaming_hosts ADD COLUMN box86_start_fullscreen INTEGER NOT NULL DEFAULT 1`);
+	}
 }
 
 function seedDefaultAdmin(sqlite: Database.Database) {

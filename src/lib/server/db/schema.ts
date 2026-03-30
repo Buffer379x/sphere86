@@ -38,6 +38,8 @@ export const streamingHosts = sqliteTable('streaming_hosts', {
 	binaryPath: text('binary_path').notNull().default('/usr/local/bin/86Box'),
 	/** X11 display for 86Box + must match Sunshine (e.g. :0 or :2.0 from `echo $DISPLAY` on the host). */
 	x11Display: text('x11_display').notNull().default(':0'),
+	/** Append 86Box `-F` when publishing / re-publishing to Sunshine. */
+	box86StartFullscreen: integer('box86_start_fullscreen', { mode: 'boolean' }).notNull().default(true),
 	status: text('status', { enum: ['online', 'offline', 'unknown'] }).notNull().default('unknown'),
 	sunshineVersion: text('sunshine_version'),
 	lastCheckedAt: text('last_checked_at'),

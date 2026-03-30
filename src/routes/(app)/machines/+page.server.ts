@@ -13,8 +13,14 @@ import {
 	type MachineConfig
 } from '$lib/server/86box/config-generator.js';
 import { isHardwareDbAvailable, loadHardwareDb } from '$lib/server/86box/hardware-db.js';
-import { build86BoxCommand, parseSunshineScheme, type SunshineHost } from '$lib/server/sunshine/client.js';
-import * as sunshineClient from '$lib/server/sunshine/client.js';
+import {
+	build86BoxCommand,
+	getApps,
+	parseSunshineScheme,
+	resolveSunshineAppIndex,
+	saveSunshineApp,
+	type SunshineHost
+} from '$lib/server/sunshine/client.js';
 import { logAudit } from '$lib/server/audit.js';
 import { v4 as uuid } from 'uuid';
 import { writeFileSync, mkdirSync, unlinkSync, rmSync, existsSync } from 'fs';
@@ -171,7 +177,10 @@ export const actions: Actions = {
 
 		const configAbsPath = join(host.configBasePath, profile.deployPath);
 		const romAbsPath = join(host.configBasePath, 'roms');
-		const cmd = build86BoxCommand(host.binaryPath, configAbsPath, romAbsPath, host.x11Display);
+		const startFs = host.box86StartFullscreen !== false;
+		const cmd = build86BoxCommand(host.binaryPath, configAbsPath, romAbsPath, host.x11Display, startFs);
+		const appName = `86Box: ${profile.name}`;
+		const workingDir = dirname(configAbsPath);
 
 		const sunshineHost: SunshineHost = {
 			address: host.address,
@@ -182,27 +191,66 @@ export const actions: Actions = {
 			sunshineScheme: parseSunshineScheme(host.sunshineScheme)
 		};
 
+		const existingLink = await db.select().from(sunshineAppLinks).where(eq(sunshineAppLinks.profileId, id)).get();
+
 		try {
-			await sunshineClient.addApp(sunshineHost, {
-				name: `86Box: ${profile.name}`, cmd, workingDir: dirname(configAbsPath)
+			const appsBefore = await getApps(sunshineHost);
+			const resolvedIdx = resolveSunshineAppIndex(appsBefore, {
+				linkAppName: existingLink?.sunshineAppName,
+				preferredName: appName,
+				deployPathSegment: profile.deployPath
 			});
+
+			const index = resolvedIdx !== null ? resolvedIdx : -1;
+			await saveSunshineApp(sunshineHost, {
+				name: appName,
+				cmd,
+				workingDir,
+				index
+			});
+
+			const appsAfter = await getApps(sunshineHost);
+			const idxAfter = resolveSunshineAppIndex(appsAfter, {
+				linkAppName: appName,
+				preferredName: appName,
+				deployPathSegment: profile.deployPath
+			});
+			const now = new Date().toISOString();
+
+			if (existingLink) {
+				await db
+					.update(sunshineAppLinks)
+					.set({
+						sunshineAppName: appName,
+						command: cmd,
+						sunshineAppIndex: idxAfter,
+						updatedAt: now
+					})
+					.where(eq(sunshineAppLinks.id, existingLink.id));
+				await db.update(machineProfiles).set({ updatedAt: now }).where(eq(machineProfiles.id, id));
+			} else {
+				const linkId = uuid();
+				await db.insert(sunshineAppLinks).values({
+					id: linkId,
+					profileId: profile.id,
+					hostId: host.id,
+					sunshineAppName: appName,
+					command: cmd,
+					sunshineAppIndex: idxAfter,
+					createdAt: now,
+					updatedAt: now
+				});
+				await db.update(machineProfiles).set({ sunshineAppId: linkId, updatedAt: now }).where(eq(machineProfiles.id, id));
+			}
 		} catch (err) {
 			return fail(502, { error: `Sunshine API error: ${err instanceof Error ? err.message : 'Unknown'}` });
 		}
 
-		const linkId = uuid();
-		const now = new Date().toISOString();
-		await db.insert(sunshineAppLinks).values({
-			id: linkId, profileId: profile.id, hostId: host.id,
-			sunshineAppName: `86Box: ${profile.name}`, command: cmd,
-			createdAt: now, updatedAt: now
-		});
-
-		await db.update(machineProfiles).set({ sunshineAppId: linkId, updatedAt: now })
-			.where(eq(machineProfiles.id, id));
-
 		await logAudit(locals.user?.id ?? null, 'publish_sunshine', 'machine_profile', id, profile.name);
-		return { success: true, message: 'Published to Sunshine!' };
+		return {
+			success: true,
+			message: existingLink ? 'Sunshine app updated (re-published).' : 'Published to Sunshine!'
+		};
 	},
 
 	delete: async ({ request, locals }) => {

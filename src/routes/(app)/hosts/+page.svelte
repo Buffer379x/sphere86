@@ -229,6 +229,17 @@
 							Must match the desktop session on the host (run <span class="font-mono">echo $DISPLAY</span> in a terminal there). Use <span class="font-mono">:2.0</span> if it is not <span class="font-mono">:0</span> — otherwise 86Box and Sunshine can show a black screen.
 						</p>
 					</div>
+					<div class="pt-1">
+						<ToggleSwitch
+							id="box86StartFullscreen"
+							name="box86StartFullscreen"
+							checked={editing?.box86StartFullscreen ?? true}
+							label="Start 86Box fullscreen (-F) when publishing"
+						/>
+						<p class="text-xs mt-2 ml-[4.5rem]" style="color: var(--theme-on-surface-variant);">
+							Re-publish a machine after changing this or the binary path so Sunshine gets the new command.
+						</p>
+					</div>
 					<div class="pt-5">
 						<ToggleSwitch
 							id="tlsVerify"

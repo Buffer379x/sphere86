@@ -107,6 +107,7 @@ The wizard supports a full install, 86Box-only, Sunshine-only, share-only, and s
 
 - **ROM path:** Sphere86 publishes Sunshine commands with **`-R`** pointing at `<host config base>/roms` (the same folder the wizard links to `/opt/86box/roms`). Keep ROM files there or re-point the host in the Sphere86 UI.  
 - **GUI / input:** 86Box is launched with the host’s **X11 DISPLAY** (match `echo $DISPLAY` on the streaming host; set in Sphere86 per Sunshine host if not `:0`) and **`QT_QPA_PLATFORM=xcb`** so it runs on the X session Sunshine captures. If you still see only a static desktop, **re-publish** the machine from Sphere86 so the updated command is sent to Sunshine.  
+- **Fullscreen:** Per streaming host you can enable **Start 86Box fullscreen (-F)**; use **Re-publish** on the machine so Sunshine stores the new command (editing the VM config alone does not change Sunshine).  
 - **Auto-login:** Required for Moonlight when no one is at the physical console; the wizard configures LightDM accordingly. Re-run the wizard’s **Sunshine-only** or **full** path if you change the streaming user name.
 
 ### Workstation without Docker
