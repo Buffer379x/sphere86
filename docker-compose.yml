@@ -12,7 +12,8 @@ services:
       - SHARE_ROOT=/data
       - NODE_ENV=production
     volumes:
-      - /Users/branko.bordac/Documents/GitHub/sphere86_data:/data
+      # Set SPHERE86_DATA_DIR in a .env file before first start.
+      - ${SPHERE86_DATA_DIR:-/SET_THIS_PATH_FOR_SPHERE86_DATA}:/data
     # Used by Docker as the service health status (`docker compose ps`, orchestrators).
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]

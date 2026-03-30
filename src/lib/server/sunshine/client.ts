@@ -149,5 +149,5 @@ export async function getConfig(host: SunshineHost): Promise<Record<string, stri
  * The config path is absolute on the streaming host.
  */
 export function build86BoxCommand(binaryPath: string, configAbsolutePath: string): string {
-	return `${binaryPath} -C "${configAbsolutePath}"`;
+	return `"${binaryPath}" -C "${configAbsolutePath}"`;
 }

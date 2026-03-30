@@ -21,12 +21,13 @@ WORKDIR /app
 COPY --from=builder /app/build ./build
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./
-COPY --from=builder /app/scripts ./scripts
+COPY --from=builder /app/tools/scripts ./scripts
 
 ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOST=0.0.0.0
-ENV DATABASE_URL=file:/data/sphere86.db
+ENV DATABASE_URL=file:/data/config/sphere86.db
+ENV SHARE_ROOT=/data
 ENV SPHERE86_SECRET=change-me-in-production
 
 VOLUME /data

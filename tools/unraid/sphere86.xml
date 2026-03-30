@@ -1,0 +1,26 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>sphere86</Name>
+  <Repository>ghcr.io/OWNER/sphere86:latest</Repository>
+  <Registry>https://ghcr.io</Registry>
+  <Network>bridge</Network>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/OWNER/sphere86/issues</Support>
+  <Project>https://github.com/OWNER/sphere86</Project>
+  <Overview>
+    Sphere86: web UI for 86Box configs and Sunshine publishing. Replace OWNER with your GitHub user or organization in Repository and TemplateURL, or point Repository to any image built from this repo.
+    Map a host folder to /data for SQLite, generated configs, and VM data. Set SPHERE86_SECRET to a stable random value of at least 32 characters.
+  </Overview>
+  <Category>Productivity: Tools</Category>
+  <WebUI>http://[IP]:[PORT:3000]/</WebUI>
+  <TemplateURL>https://raw.githubusercontent.com/OWNER/sphere86/main/tools/unraid/sphere86.xml</TemplateURL>
+  <Config Name="Web UI" Target="3000" Default="3000" Mode="tcp" Description="HTTP port for Sphere86" Type="Port" Display="always" Required="true" Mask="false"/>
+  <Config Name="Data" Target="/data" Default="/mnt/user/appdata/sphere86" Mode="rw" Description="Persistent storage: database under /data/config, VM files under /data/vms, etc." Type="Path" Display="always" Required="true" Mask="false"/>
+  <Config Name="SPHERE86_SECRET" Target="SPHERE86_SECRET" Default="" Description="Credential encryption key (min 32 characters). Keep the same value across upgrades." Type="Variable" Display="always" Required="true" Mask="true"/>
+  <Config Name="DATABASE_URL" Target="DATABASE_URL" Default="file:/data/config/sphere86.db" Description="SQLite file inside the container" Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="SHARE_ROOT" Target="SHARE_ROOT" Default="/data" Description="Must stay /data when using the Data path mapping above" Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="NODE_ENV" Target="NODE_ENV" Default="production" Description="Node environment" Type="Variable" Display="advanced-hide" Required="false" Mask="false"/>
+  <Config Name="PORT" Target="PORT" Default="3000" Description="Internal HTTP port (match Web UI port)" Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="HOST" Target="HOST" Default="0.0.0.0" Description="Bind address inside container" Type="Variable" Display="advanced-hide" Required="false" Mask="false"/>
+</Container>

@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 #
-# Sphere86 – Installations-Wizard (Streaming-Host)
+# Sphere86 - Install Wizard (Streaming Host)
 #
-# Debian 12 / Ubuntu 22.04+ (root/sudo).
-# ROMs werden nicht heruntergeladen – Verwaltung über das Sphere86-Webpanel.
+# Debian 12 / Ubuntu 22.04+ (root/sudo)
+# ROMs are not downloaded by this script - manage ROMs in Sphere86 web panel.
 #
-#   sudo bash scripts/sphere86_install_wizard.sh
+#   sudo bash tools/scripts/sphere86-install-wizard.sh
 #
 
 set -euo pipefail
@@ -16,7 +16,6 @@ COLOR_CYAN='\033[0;36m'
 COLOR_GREEN='\033[0;32m'
 COLOR_YELLOW='\033[1;33m'
 COLOR_RED='\033[0;31m'
-COLOR_DIM='\033[0;90m'
 COLOR_NC='\033[0m'
 
 SPHERE86_CONF_DIR="/etc/sphere86"
@@ -28,7 +27,7 @@ ok()   { echo -e "${COLOR_GREEN}[  OK  ]${COLOR_NC} $*"; }
 warn() { echo -e "${COLOR_YELLOW}[ WARN ]${COLOR_NC} $*"; }
 err()  { echo -e "${COLOR_RED}[ERROR ]${COLOR_NC} $*"; }
 
-# --- Zusammenfassung (Passed / Failed) --------------------------------------
+# --- Summary (Passed / Failed) ----------------------------------------------
 declare -a WIZARD_STEPS=()
 declare -a WIZARD_OK=()
 
@@ -37,7 +36,7 @@ wizard_reset() {
 	WIZARD_OK=()
 }
 
-# $1 = Beschreibung, $2 = 0 = passed, 1 = failed
+# $1 = description, $2 = 0 passed, 1 failed
 wizard_add() {
 	WIZARD_STEPS+=("$1")
 	WIZARD_OK+=("$2")
@@ -47,7 +46,7 @@ wizard_print_summary() {
 	local i passed=0 failed=0
 	echo ""
 	log "=========================================="
-	log "  Zusammenfassung"
+	log "  Summary"
 	log "=========================================="
 	for i in "${!WIZARD_STEPS[@]}"; do
 		if [[ "${WIZARD_OK[$i]}" == "0" ]]; then
@@ -60,14 +59,14 @@ wizard_print_summary() {
 	done
 	echo ""
 	if [[ $failed -eq 0 ]]; then
-		ok "Alle Schritte erfolgreich ($passed)."
+		ok "All steps succeeded ($passed)."
 	else
-		err "$failed Schritt(e) fehlgeschlagen, $passed bestanden."
+		err "$failed step(s) failed, $passed passed."
 	fi
 	echo ""
 }
 
-# --- Konfiguration (persistente Metadaten, keine Passwörter) -----------------
+# --- Configuration (persistent metadata, no passwords) -----------------------
 BOX_USER="${BOX_USER:-sphere86}"
 CONFIG_PATH="${CONFIG_PATH:-/opt/86box/configs}"
 HOSTNAME_INPUT="${HOSTNAME_INPUT:-streaming-host}"
@@ -84,7 +83,7 @@ save_install_conf() {
 	mkdir -p "$SPHERE86_CONF_DIR"
 	umask 077
 	cat > "$INSTALL_CONF" <<EOF
-# Sphere86 Install-Wizard (keine Passwörter; nur Referenz)
+# Sphere86 install wizard (no passwords; reference only)
 HOSTNAME_INPUT=$HOSTNAME_INPUT
 BOX_USER=$BOX_USER
 CONFIG_PATH=$CONFIG_PATH
@@ -106,16 +105,16 @@ load_install_conf() {
 
 preflight_root() {
 	if [[ $EUID -ne 0 ]]; then
-		err "Bitte als root oder mit sudo ausführen."
+		err "Run this script as root (or via sudo)."
 		exit 1
 	fi
 }
 
 # ---------------------------------------------------------------------------
-# Paket-Basis (idempotent)
+# Base packages (idempotent)
 # ---------------------------------------------------------------------------
 install_base_packages() {
-	log "Installiere/aktualisiere Basispakete..."
+	log "Installing/upgrading base packages..."
 	apt-get update -qq
 	apt-get upgrade -y -qq
 	echo "lightdm shared/default-x-display-manager select lightdm" | debconf-set-selections
@@ -129,7 +128,7 @@ install_base_packages() {
 }
 
 # ---------------------------------------------------------------------------
-# Hostname & Benutzer
+# Hostname and user
 # ---------------------------------------------------------------------------
 apply_hostname() {
 	hostnamectl set-hostname "$HOSTNAME_INPUT"
@@ -140,12 +139,12 @@ ensure_user() {
 		useradd -m -s /bin/bash -G audio,video,input,render "$BOX_USER"
 		echo "$BOX_USER:$BOX_PASS" | chpasswd
 	else
-		warn "Benutzer $BOX_USER existiert bereits (Passwort unverändert)."
+		warn "User $BOX_USER already exists (password unchanged)."
 	fi
 }
 
 # ---------------------------------------------------------------------------
-# Statische IP (Netplan)
+# Static IP (Netplan)
 # ---------------------------------------------------------------------------
 apply_static_ip() {
 	if [[ -z "$STATIC_IP" ]]; then
@@ -154,7 +153,7 @@ apply_static_ip() {
 	local IFACE
 	IFACE=$(ip -br link | grep -v 'lo' | head -1 | awk '{print $1}')
 	if ! command -v netplan &>/dev/null; then
-		warn "Netplan nicht gefunden – IP manuell setzen."
+		warn "Netplan not found - configure static IP manually."
 		return 1
 	fi
 	cat > /etc/netplan/99-sphere86.yaml <<NETPLAN
@@ -177,9 +176,8 @@ NETPLAN
 # 86Box
 # ---------------------------------------------------------------------------
 install_86box_binary() {
-	log "Installiere 86Box (neuestes Release)..."
-	local ARCH RELEASE_JSON TAG DOWNLOAD_URL FILENAME
-	ARCH=$(uname -m)
+	log "Installing 86Box (latest release)..."
+	local RELEASE_JSON TAG DOWNLOAD_URL FILENAME CANDIDATE
 	RELEASE_JSON=$(curl -sL "https://api.github.com/repos/86Box/86Box/releases/latest")
 	TAG=$(echo "$RELEASE_JSON" | jq -r '.tag_name')
 	DOWNLOAD_URL=$(echo "$RELEASE_JSON" | jq -r ".assets[] | select(.name | test(\"Linux.*x86_64\")) | .browser_download_url" | head -1)
@@ -189,7 +187,7 @@ install_86box_binary() {
 	fi
 
 	if [[ -z "$DOWNLOAD_URL" || "$DOWNLOAD_URL" == "null" ]]; then
-		err "Kein passendes 86Box-Binary gefunden."
+		err "No suitable 86Box binary found in latest release."
 		return 1
 	fi
 
@@ -210,12 +208,19 @@ install_86box_binary() {
 		chmod +x /opt/86box/bin/86Box
 		ln -sf /opt/86box/bin/86Box /usr/local/bin/86Box
 	fi
+	if [[ ! -x /usr/local/bin/86Box ]]; then
+		CANDIDATE=$(ls -1 /opt/86box/bin/86Box* 2>/dev/null | head -1 || true)
+		if [[ -n "$CANDIDATE" && -f "$CANDIDATE" ]]; then
+			chmod +x "$CANDIDATE"
+			ln -sf "$CANDIDATE" /usr/local/bin/86Box
+		fi
+	fi
 
 	[[ -x "$(command -v 86Box 2>/dev/null || true)" ]] || [[ -f /usr/local/bin/86Box ]]
 }
 
 link_rom_path() {
-	log "Verknüpfe ROM-Pfad (ROM-Inhalt über Sphere86-Panel bereitstellen)..."
+	log "Linking ROM path (ROM content is managed by Sphere86 panel)..."
 	mkdir -p "$CONFIG_PATH/roms"
 	mkdir -p /opt/86box
 	rm -rf /opt/86box/roms
@@ -227,7 +232,7 @@ link_rom_path() {
 # Sunshine
 # ---------------------------------------------------------------------------
 install_sunshine_deb() {
-	log "Installiere Sunshine-Paket..."
+	log "Installing Sunshine package..."
 	local DISTRO SUNSHINE_DEB_URL DEB_FILE
 	DISTRO=$(lsb_release -cs 2>/dev/null || echo "bookworm")
 	SUNSHINE_DEB_URL=$(curl -sL "https://api.github.com/repos/LizardByte/Sunshine/releases/latest" | \
@@ -239,7 +244,7 @@ install_sunshine_deb() {
 	fi
 
 	if [[ -z "$SUNSHINE_DEB_URL" || "$SUNSHINE_DEB_URL" == "null" ]]; then
-		err "Sunshine-.deb nicht gefunden."
+		err "Sunshine .deb not found in latest release."
 		return 1
 	fi
 
@@ -262,11 +267,17 @@ SUNCONF
 
 	if command -v sunshine >/dev/null 2>&1; then
 		sudo -u "$BOX_USER" sunshine --creds "$BOX_USER" "$SUNSHINE_PASS" >/dev/null 2>&1 || \
-			warn "Sunshine-Zugangsdaten ggf. manuell: sudo -u $BOX_USER sunshine --creds $BOX_USER <pass>"
+			warn "Could not set Sunshine credentials automatically. Run: sudo -u $BOX_USER sunshine --creds $BOX_USER <password>"
 	fi
 }
 
 write_sunshine_systemd() {
+	local sunshine_bin
+	sunshine_bin="$(command -v sunshine || true)"
+	if [[ -z "$sunshine_bin" ]]; then
+		err "Sunshine binary not found in PATH."
+		return 1
+	fi
 	cat > "/etc/systemd/system/${SUNSHINE_UNIT}" <<SERVICE
 [Unit]
 Description=Sunshine (Sphere86)
@@ -278,7 +289,7 @@ Type=simple
 User=$BOX_USER
 Group=$BOX_USER
 WorkingDirectory=/home/$BOX_USER
-ExecStart=/usr/bin/sunshine
+ExecStart=$sunshine_bin
 Restart=on-failure
 RestartSec=3
 Environment=HOME=/home/$BOX_USER
@@ -293,7 +304,7 @@ SERVICE
 }
 
 # ---------------------------------------------------------------------------
-# Share-Mount
+# Share mount
 # ---------------------------------------------------------------------------
 setup_share_mount() {
 	mkdir -p "$CONFIG_PATH"
@@ -313,7 +324,7 @@ setup_share_mount() {
 			SMB_SOURCE="//${SMB_SOURCE/:/\/}"
 		fi
 		if [[ "$SMB_SOURCE" != //* ]]; then
-			err "SMB-Pfad muss //server/share[/pfad] sein. Erhalten: $SHARE_ADDR"
+			err "SMB path must look like //server/share[/subpath]. Received: $SHARE_ADDR"
 			return 1
 		fi
 		local CREDS_FILE="/etc/sphere86-smb-creds"
@@ -361,7 +372,7 @@ test_sunshine_service() {
 }
 
 test_sunshine_http() {
-	# API oft 401 ohne Session – Verbindung zählt; HTTPS zuerst, dann HTTP
+	# API often returns 401 without session; connectivity still means success.
 	local code
 	code=$(curl -sk --connect-timeout 5 -o /dev/null -w "%{http_code}" "https://127.0.0.1:47990/api/config" 2>/dev/null || echo "000")
 	[[ "$code" =~ ^(200|401|403)$ ]] && return 0
@@ -385,177 +396,177 @@ test_static_ip_applied() {
 
 run_tests_for_mode() {
 	local mode="$1"
-	# Install-Schritte bleiben erhalten; Tests werden angehängt
+	# Keep install steps; append tests below them.
 
 	case "$mode" in
 		full)
-			test_86box_installed && wizard_add "[Test] 86Box-Binary vorhanden" 0 || wizard_add "[Test] 86Box-Binary vorhanden" 1
-			test_config_dir && wizard_add "[Test] Konfigurationsverzeichnis $CONFIG_PATH" 0 || wizard_add "[Test] Konfigurationsverzeichnis" 1
-			test_sunshine_service && wizard_add "[Test] Sunshine-Dienst aktiv (${SUNSHINE_UNIT})" 0 || wizard_add "[Test] Sunshine-Dienst aktiv" 1
-			test_sunshine_http && wizard_add "[Test] Sunshine-Web-UI (Port 47990) erreichbar" 0 || wizard_add "[Test] Sunshine-Web-UI erreichbar" 1
-			test_share_mounted && wizard_add "[Test] Share unter $CONFIG_PATH gemountet" 0 || wizard_add "[Test] Share gemountet" 1
+			test_86box_installed && wizard_add "[Test] 86Box binary present" 0 || wizard_add "[Test] 86Box binary present" 1
+			test_config_dir && wizard_add "[Test] Config directory $CONFIG_PATH exists" 0 || wizard_add "[Test] Config directory exists" 1
+			test_sunshine_service && wizard_add "[Test] Sunshine service active (${SUNSHINE_UNIT})" 0 || wizard_add "[Test] Sunshine service active" 1
+			test_sunshine_http && wizard_add "[Test] Sunshine Web UI reachable (port 47990)" 0 || wizard_add "[Test] Sunshine Web UI reachable" 1
+			test_share_mounted && wizard_add "[Test] Share mounted on $CONFIG_PATH" 0 || wizard_add "[Test] Share mounted" 1
 			[[ -n "$STATIC_IP" ]] && {
-				test_static_ip_applied && wizard_add "[Test] Statische IP $STATIC_IP" 0 || wizard_add "[Test] Statische IP" 1
+				test_static_ip_applied && wizard_add "[Test] Static IP $STATIC_IP applied" 0 || wizard_add "[Test] Static IP applied" 1
 			}
 			;;
 		86box)
-			test_86box_installed && wizard_add "[Test] 86Box-Binary" 0 || wizard_add "[Test] 86Box-Binary" 1
-			test_config_dir && wizard_add "[Test] Konfigurationsverzeichnis" 0 || wizard_add "[Test] Konfigurationsverzeichnis" 1
+			test_86box_installed && wizard_add "[Test] 86Box binary" 0 || wizard_add "[Test] 86Box binary" 1
+			test_config_dir && wizard_add "[Test] Config directory" 0 || wizard_add "[Test] Config directory" 1
 			;;
 		sunshine)
-			test_sunshine_service && wizard_add "[Test] Sunshine-Dienst aktiv + Autostart" 0 || wizard_add "[Test] Sunshine-Dienst" 1
-			test_sunshine_http && wizard_add "[Test] Sunshine-Web-UI" 0 || wizard_add "[Test] Sunshine-Web-UI" 1
+			test_sunshine_service && wizard_add "[Test] Sunshine service active + autostart" 0 || wizard_add "[Test] Sunshine service" 1
+			test_sunshine_http && wizard_add "[Test] Sunshine Web UI" 0 || wizard_add "[Test] Sunshine Web UI" 1
 			;;
 		smb)
-			test_config_dir && wizard_add "[Test] Pfad $CONFIG_PATH" 0 || wizard_add "[Test] Konfigurationspfad" 1
-			test_share_mounted && wizard_add "[Test] Share gemountet" 0 || wizard_add "[Test] Share gemountet" 1
+			test_config_dir && wizard_add "[Test] Path $CONFIG_PATH exists" 0 || wizard_add "[Test] Config path exists" 1
+			test_share_mounted && wizard_add "[Test] Share mounted" 0 || wizard_add "[Test] Share mounted" 1
 			;;
 		ip)
-			test_static_ip_applied && wizard_add "[Test] IP-Adresse gesetzt" 0 || wizard_add "[Test] IP-Adresse" 1
+			test_static_ip_applied && wizard_add "[Test] IP address applied" 0 || wizard_add "[Test] IP address applied" 1
 			;;
 	esac
 	wizard_print_summary
 }
 
 # ---------------------------------------------------------------------------
-# Abfragen
+# Prompts
 # ---------------------------------------------------------------------------
 prompt_full_config() {
 	echo ""
-	log "Neuinstallation – Eingaben"
+	log "Full installation - input values"
 	read -rp "Hostname [streaming-host]: " HOSTNAME_INPUT
 	HOSTNAME_INPUT="${HOSTNAME_INPUT:-streaming-host}"
-	read -rp "Benutzer für 86Box/Sunshine [sphere86]: " BOX_USER
+	read -rp "User for 86Box/Sunshine [sphere86]: " BOX_USER
 	BOX_USER="${BOX_USER:-sphere86}"
-	read -rp "Passwort für $BOX_USER: " -s BOX_PASS
+	read -rp "Password for $BOX_USER: " -s BOX_PASS
 	echo ""
 	BOX_PASS="${BOX_PASS:-sphere86}"
-	read -rp "Statische IP (leer = DHCP): " STATIC_IP
-	read -rp "Konfig-Mountpunkt [/opt/86box/configs]: " CONFIG_PATH
+	read -rp "Static IP (leave blank for DHCP): " STATIC_IP
+	read -rp "Config mount path [/opt/86box/configs]: " CONFIG_PATH
 	CONFIG_PATH="${CONFIG_PATH:-/opt/86box/configs}"
-	read -rp "NFS/SMB-Freigabe (leer = überspringen, z. B. 192.168.1.10:/share oder //server/share): " SHARE_ADDR
+	read -rp "NFS/SMB share address (blank to skip, e.g. 192.168.1.10:/share or //server/share): " SHARE_ADDR
 	SHARE_TYPE="smb"
 	SMB_USER=""
 	SMB_PASS=""
 	SMB_DOMAIN=""
 	if [[ -n "$SHARE_ADDR" ]]; then
-		read -rp "Typ [nfs/smb, Standard smb]: " SHARE_TYPE
+		read -rp "Share type [nfs/smb, default smb]: " SHARE_TYPE
 		SHARE_TYPE="${SHARE_TYPE:-smb}"
 		while [[ "$SHARE_TYPE" != "nfs" && "$SHARE_TYPE" != "smb" ]]; do
-			warn "Bitte nfs oder smb eingeben."
-			read -rp "Typ [nfs/smb]: " SHARE_TYPE
+			warn "Please enter exactly: nfs or smb."
+			read -rp "Share type [nfs/smb]: " SHARE_TYPE
 			SHARE_TYPE="${SHARE_TYPE:-smb}"
 		done
 		if [[ "$SHARE_TYPE" == "smb" ]]; then
-			read -rp "SMB-Benutzer (leer = Gast): " SMB_USER
+			read -rp "SMB username (blank = guest): " SMB_USER
 			if [[ -n "$SMB_USER" ]]; then
-				read -rp "SMB-Passwort: " -s SMB_PASS
+				read -rp "SMB password: " -s SMB_PASS
 				echo ""
-				read -rp "SMB-Domäne (optional): " SMB_DOMAIN
+				read -rp "SMB domain/workgroup (optional): " SMB_DOMAIN
 			fi
 		fi
 	fi
-	read -rp "Sunshine Web-UI Passwort [sunshine]: " SUNSHINE_PASS
+	read -rp "Sunshine Web UI password [sunshine]: " SUNSHINE_PASS
 	SUNSHINE_PASS="${SUNSHINE_PASS:-sunshine}"
 	echo ""
 }
 
 prompt_minimal_user() {
 	if ! load_install_conf; then
-		read -rp "Benutzer für 86Box/Sunshine [sphere86]: " BOX_USER
+		read -rp "User for 86Box/Sunshine [sphere86]: " BOX_USER
 		BOX_USER="${BOX_USER:-sphere86}"
 	else
-		log "Nutze install.conf: BOX_USER=$BOX_USER"
+		log "Using install.conf: BOX_USER=$BOX_USER"
 	fi
-	read -rp "Passwort für Benutzer $BOX_USER (nur bei neuem User nötig): " -s BOX_PASS
+	read -rp "Password for user $BOX_USER (only needed for newly created user): " -s BOX_PASS
 	echo ""
 	BOX_PASS="${BOX_PASS:-sphere86}"
-	read -rp "Konfig-Pfad [/opt/86box/configs]: " CONFIG_PATH
+	read -rp "Config path [/opt/86box/configs]: " CONFIG_PATH
 	CONFIG_PATH="${CONFIG_PATH:-/opt/86box/configs}"
 }
 
 prompt_sunshine_only() {
 	if load_install_conf; then
-		log "Aus install.conf: BOX_USER=$BOX_USER"
+		log "Using install.conf: BOX_USER=$BOX_USER"
 	else
-		read -rp "Benutzer für Sunshine [sphere86]: " BOX_USER
+		read -rp "User for Sunshine [sphere86]: " BOX_USER
 		BOX_USER="${BOX_USER:-sphere86}"
 	fi
-	read -rp "Sunshine Web-UI Passwort [sunshine]: " SUNSHINE_PASS
+	read -rp "Sunshine Web UI password [sunshine]: " SUNSHINE_PASS
 	SUNSHINE_PASS="${SUNSHINE_PASS:-sunshine}"
 }
 
 prompt_smb_only() {
 	if load_install_conf; then
-		log "Aktueller CONFIG_PATH=$CONFIG_PATH (Enter behält)"
+		log "Current CONFIG_PATH=$CONFIG_PATH (press Enter to keep)"
 	fi
-	read -rp "Konfig-Mountpunkt [$CONFIG_PATH]: " _cp
+	read -rp "Config mount path [$CONFIG_PATH]: " _cp
 	[[ -n "$_cp" ]] && CONFIG_PATH="$_cp"
-	read -rp "NFS/SMB-Adresse (z. B. //server/share oder host:/path): " SHARE_ADDR
-	[[ -z "$SHARE_ADDR" ]] && { err "Share-Adresse erforderlich."; return 1; }
-	read -rp "Typ [nfs/smb, Standard smb]: " SHARE_TYPE
+	read -rp "NFS/SMB address (e.g. //server/share or host:/path): " SHARE_ADDR
+	[[ -z "$SHARE_ADDR" ]] && { err "Share address is required."; return 1; }
+	read -rp "Share type [nfs/smb, default smb]: " SHARE_TYPE
 	SHARE_TYPE="${SHARE_TYPE:-smb}"
 	while [[ "$SHARE_TYPE" != "nfs" && "$SHARE_TYPE" != "smb" ]]; do
-		read -rp "Typ [nfs/smb]: " SHARE_TYPE
+		read -rp "Share type [nfs/smb]: " SHARE_TYPE
 		SHARE_TYPE="${SHARE_TYPE:-smb}"
 	done
 	SMB_USER=""
 	SMB_PASS=""
 	SMB_DOMAIN=""
 	if [[ "$SHARE_TYPE" == "smb" ]]; then
-		read -rp "SMB-Benutzer (leer = Gast): " SMB_USER
+		read -rp "SMB username (blank = guest): " SMB_USER
 		if [[ -n "$SMB_USER" ]]; then
-			read -rp "SMB-Passwort: " -s SMB_PASS
+			read -rp "SMB password: " -s SMB_PASS
 			echo ""
-			read -rp "SMB-Domäne (optional): " SMB_DOMAIN
+			read -rp "SMB domain/workgroup (optional): " SMB_DOMAIN
 		fi
 	fi
 }
 
 prompt_ip_only() {
-	read -rp "Statische IP (z. B. 192.168.1.50): " STATIC_IP
-	[[ -n "$STATIC_IP" ]] || { err "Keine IP angegeben."; return 1; }
+	read -rp "Static IP (e.g. 192.168.1.50): " STATIC_IP
+	[[ -n "$STATIC_IP" ]] || { err "No IP address provided."; return 1; }
 }
 
 # ---------------------------------------------------------------------------
-# Aktionen
+# Actions
 # ---------------------------------------------------------------------------
 do_full_install() {
 	wizard_reset
 	prompt_full_config
-	read -rp "Fortfahren? [J/n] " CONFIRM
-	[[ "${CONFIRM,,}" == "n" ]] && { log "Abgebrochen."; return 0; }
+	read -rp "Continue? [Y/n] " CONFIRM
+	[[ "${CONFIRM,,}" == "n" ]] && { log "Cancelled."; return 0; }
 
 	local step_ok=0
 
-	install_base_packages && wizard_add "System-Pakete & Updates" 0 || { wizard_add "System-Pakete & Updates" 1; step_ok=1; }
+	install_base_packages && wizard_add "System packages & upgrades" 0 || { wizard_add "System packages & upgrades" 1; step_ok=1; }
 	[[ $step_ok -ne 0 ]] && { wizard_print_summary; return 1; }
 
-	apply_hostname && wizard_add "Hostname setzen" 0 || wizard_add "Hostname" 1
-	ensure_user && wizard_add "Benutzer $BOX_USER" 0 || wizard_add "Benutzer" 1
+	apply_hostname && wizard_add "Set hostname" 0 || wizard_add "Set hostname" 1
+	ensure_user && wizard_add "Ensure user $BOX_USER" 0 || wizard_add "Ensure user" 1
 
 	if [[ -n "$STATIC_IP" ]]; then
-		apply_static_ip && wizard_add "Statische IP $STATIC_IP" 0 || wizard_add "Statische IP" 1
+		apply_static_ip && wizard_add "Apply static IP $STATIC_IP" 0 || wizard_add "Apply static IP" 1
 	fi
 
-	install_86box_binary && wizard_add "86Box installieren" 0 || wizard_add "86Box installieren" 1
-	link_rom_path && wizard_add "ROM-Pfad verknüpft (Inhalt über Sphere86)" 0 || wizard_add "ROM-Pfad" 1
+	install_86box_binary && wizard_add "Install 86Box" 0 || wizard_add "Install 86Box" 1
+	link_rom_path && wizard_add "Link ROM path (content managed by Sphere86)" 0 || wizard_add "Link ROM path" 1
 
-	install_sunshine_deb && wizard_add "Sunshine-Paket installieren" 0 || wizard_add "Sunshine-Paket" 1
-	configure_sunshine_files && wizard_add "Sunshine-Konfiguration" 0 || wizard_add "Sunshine-Konfiguration" 1
-	write_sunshine_systemd && wizard_add "Sunshine systemd: Start + Autostart" 0 || wizard_add "Sunshine systemd" 1
+	install_sunshine_deb && wizard_add "Install Sunshine package" 0 || wizard_add "Install Sunshine package" 1
+	configure_sunshine_files && wizard_add "Configure Sunshine files" 0 || wizard_add "Configure Sunshine files" 1
+	write_sunshine_systemd && wizard_add "Sunshine systemd: start + autostart" 0 || wizard_add "Sunshine systemd" 1
 
-	setup_share_mount && wizard_add "Share einbinden" 0 || wizard_add "Share einbinden" 1
-	link_rom_path && wizard_add "ROM-Pfad nach Share" 0 || true
+	setup_share_mount && wizard_add "Mount share" 0 || wizard_add "Mount share" 1
+	link_rom_path && wizard_add "Re-link ROM path after share mount" 0 || true
 
-	configure_firewall_hints && wizard_add "Firewall (UFW) Ports" 0 || wizard_add "Firewall" 1
+	configure_firewall_hints && wizard_add "Firewall (UFW) ports" 0 || wizard_add "Firewall (UFW) ports" 1
 
 	save_install_conf
-	ok "install.conf gespeichert: $INSTALL_CONF"
+	ok "Saved install metadata: $INSTALL_CONF"
 
 	echo ""
-	log "Hinweis: ROMs werden nicht heruntergeladen – bitte über das Sphere86-Panel verwalten."
-	log "Sunshine-UI: https://$(hostname -I 2>/dev/null | awk '{print $1}'):47990"
+	log "ROMs are not downloaded by this script - manage ROMs in Sphere86 panel."
+	log "Sunshine UI: https://$(hostname -I 2>/dev/null | awk '{print $1}'):47990"
 
 	run_tests_for_mode full
 }
@@ -564,8 +575,8 @@ do_86box_only() {
 	wizard_reset
 	prompt_minimal_user
 	ensure_user || true
-	install_86box_binary && wizard_add "86Box neu installiert" 0 || wizard_add "86Box neu installiert" 1
-	link_rom_path && wizard_add "ROM-Pfad" 0 || wizard_add "ROM-Pfad" 1
+	install_86box_binary && wizard_add "Reinstall 86Box" 0 || wizard_add "Reinstall 86Box" 1
+	link_rom_path && wizard_add "Link ROM path" 0 || wizard_add "Link ROM path" 1
 	save_install_conf
 	run_tests_for_mode 86box
 }
@@ -574,9 +585,9 @@ do_sunshine_only() {
 	wizard_reset
 	prompt_sunshine_only
 	ensure_user || true
-	install_sunshine_deb && wizard_add "Sunshine-Paket" 0 || wizard_add "Sunshine-Paket" 1
-	configure_sunshine_files && wizard_add "Sunshine-Dateien" 0 || wizard_add "Sunshine-Dateien" 1
-	write_sunshine_systemd && wizard_add "Sunshine Dienst + Autostart" 0 || wizard_add "Sunshine Dienst" 1
+	install_sunshine_deb && wizard_add "Install Sunshine package" 0 || wizard_add "Install Sunshine package" 1
+	configure_sunshine_files && wizard_add "Configure Sunshine files" 0 || wizard_add "Configure Sunshine files" 1
+	write_sunshine_systemd && wizard_add "Sunshine service + autostart" 0 || wizard_add "Sunshine service + autostart" 1
 	save_install_conf
 	run_tests_for_mode sunshine
 }
@@ -585,8 +596,8 @@ do_smb_only() {
 	wizard_reset
 	prompt_smb_only || return 1
 	ensure_user || true
-	setup_share_mount && wizard_add "SMB/NFS eingebunden" 0 || wizard_add "SMB/NFS" 1
-	link_rom_path && wizard_add "ROM-Pfad" 0 || wizard_add "ROM-Pfad" 1
+	setup_share_mount && wizard_add "Mount SMB/NFS share" 0 || wizard_add "Mount SMB/NFS share" 1
+	link_rom_path && wizard_add "Link ROM path" 0 || wizard_add "Link ROM path" 1
 	save_install_conf
 	run_tests_for_mode smb
 }
@@ -594,32 +605,32 @@ do_smb_only() {
 do_set_ip() {
 	wizard_reset
 	prompt_ip_only || return 1
-	apply_static_ip && wizard_add "Netplan / statische IP" 0 || wizard_add "Statische IP" 1
+	apply_static_ip && wizard_add "Apply static IP (Netplan)" 0 || wizard_add "Apply static IP (Netplan)" 1
 	save_install_conf
 	run_tests_for_mode ip
 }
 
 show_menu() {
 	echo ""
-	echo -e "${COLOR_CYAN}=== Sphere86 Installations-Wizard ===${COLOR_NC}"
-	echo "  1) Neuinstallation (komplett)"
-	echo "  2) Nur 86Box installieren (bestehende Installation überschreiben)"
-	echo "  3) Nur Sunshine installieren (bestehende Installation überschreiben)"
-	echo "  4) Nur SMB/NFS-Share verbinden"
-	echo "  5) Statische IP setzen"
-	echo "  6) Beenden / Abbrechen"
+	echo -e "${COLOR_CYAN}=== Sphere86 Install Wizard ===${COLOR_NC}"
+	echo "  1) Full installation"
+	echo "  2) Install 86Box only (overwrite current install)"
+	echo "  3) Install Sunshine only (overwrite current install)"
+	echo "  4) Connect SMB/NFS share only"
+	echo "  5) Set static IP"
+	echo "  6) Exit / Cancel"
 	echo ""
 }
 
 main() {
 	preflight_root
-	log "Sphere86 Streaming-Host – Wizard"
-	log "Ziel: Debian 12 / Ubuntu 22.04+"
+	log "Sphere86 Streaming Host - Wizard"
+	log "Target OS: Debian 12 / Ubuntu 22.04+"
 	echo ""
 
 	while true; do
 		show_menu
-		read -rp "Auswahl [1-6]: " choice
+		read -rp "Select [1-6]: " choice
 		case "${choice:-}" in
 			1) do_full_install || true ;;
 			2) do_86box_only || true ;;
@@ -627,17 +638,17 @@ main() {
 			4) do_smb_only || true ;;
 			5) do_set_ip || true ;;
 			6|q|Q)
-				log "Beendet."
+				log "Exiting."
 				exit 0
 				;;
 			"")
-				warn "Bitte 1–6 wählen."
+				warn "Please choose a number from 1 to 6."
 				;;
 			*)
-				warn "Ungültige Auswahl."
+				warn "Invalid selection."
 				;;
 		esac
-		read -rp "Enter für Menü..." _
+		read -rp "Press Enter to return to menu..." _
 	done
 }
 
