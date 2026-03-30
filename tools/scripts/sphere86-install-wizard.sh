@@ -137,6 +137,8 @@ CONFIG_PATH="${CONFIG_PATH:-/opt/86box/configs}"
 HOSTNAME_INPUT="${HOSTNAME_INPUT:-streaming-host}"
 SHARE_ADDR="${SHARE_ADDR:-}"
 SHARE_TYPE="${SHARE_TYPE:-smb}"
+# Optional path inside the SMB share (combined with SHARE_ADDR as //server/share + /subfolder).
+SMB_SHARE_SUBPATH="${SMB_SHARE_SUBPATH:-}"
 SMB_USER="${SMB_USER:-}"
 SMB_PASS="${SMB_PASS:-}"
 SMB_DOMAIN="${SMB_DOMAIN:-}"
@@ -158,6 +160,7 @@ SUNSHINE_DISPLAY=$SUNSHINE_DISPLAY
 CONFIG_PATH=$CONFIG_PATH
 SHARE_ADDR=$SHARE_ADDR
 SHARE_TYPE=$SHARE_TYPE
+SMB_SHARE_SUBPATH=$SMB_SHARE_SUBPATH
 SMB_USER=$SMB_USER
 SMB_DOMAIN=$SMB_DOMAIN
 STATIC_IP=$STATIC_IP
@@ -413,8 +416,11 @@ Environment=XDG_RUNTIME_DIR=/run/user/${box_uid}
 WantedBy=multi-user.target
 SERVICE
 	systemctl daemon-reload
-	systemctl enable "${SUNSHINE_UNIT}"
-	systemctl restart "${SUNSHINE_UNIT}"
+	systemctl enable "${SUNSHINE_UNIT}" 2>/dev/null || true
+	log "Starting Sunshine (${SUNSHINE_UNIT}) — the service may take up to ~2 minutes while waiting for the X11 display. Please wait; the script is not hung."
+	if ! systemctl restart "${SUNSHINE_UNIT}" 2>/dev/null; then
+		warn "Sunshine is not active yet (common until the graphical session is ready for $BOX_USER). After LightDM auto-login: sudo systemctl restart ${SUNSHINE_UNIT}"
+	fi
 	sleep 2
 }
 
@@ -439,8 +445,16 @@ setup_share_mount() {
 			SMB_SOURCE="//${SMB_SOURCE/:/\/}"
 		fi
 		if [[ "$SMB_SOURCE" != //* ]]; then
-			err "SMB path must look like //server/share[/subpath]. Received: $SHARE_ADDR"
+			err "SMB must be a UNC path starting with // (e.g. //192.168.1.10/share or //nas/share/sphere86_data). A NAS path like /share/... is not valid here — use //hostname/share/subfolder."
 			return 1
+		fi
+		# Optional subfolder: either already in SHARE_ADDR as //server/share/sub or set via SMB_SHARE_SUBPATH.
+		if [[ -n "${SMB_SHARE_SUBPATH:-}" ]]; then
+			local _sub="${SMB_SHARE_SUBPATH#/}"
+			_sub="${_sub%/}"
+			if [[ -n "$_sub" ]]; then
+				SMB_SOURCE="${SMB_SOURCE%/}/$_sub"
+			fi
 		fi
 		# Numeric uid/gid — more reliable across CIFS versions than uid=username.
 		local box_uid box_gid
@@ -542,7 +556,12 @@ run_tests_for_mode() {
 		full)
 			test_86box_installed && wizard_add "[Test] 86Box binary present" 0 || wizard_add "[Test] 86Box binary present" 1
 			test_config_dir && wizard_add "[Test] Config directory $CONFIG_PATH exists" 0 || wizard_add "[Test] Config directory exists" 1
-			test_sunshine_service && wizard_add "[Test] Sunshine service active (${SUNSHINE_UNIT})" 0 || wizard_add "[Test] Sunshine service active" 1
+			if test_sunshine_service; then
+				wizard_add "[Test] Sunshine service active (${SUNSHINE_UNIT})" 0
+			else
+				wizard_add "[Test] Sunshine service active" 1
+				log "Hint: Sunshine may only become active after graphical login as $BOX_USER. After LightDM auto-login: sudo systemctl restart ${SUNSHINE_UNIT}"
+			fi
 			test_sunshine_http && wizard_add "[Test] Sunshine Web UI reachable (port 47990)" 0 || wizard_add "[Test] Sunshine Web UI reachable" 1
 			test_share_mounted && wizard_add "[Test] Share mounted on $CONFIG_PATH" 0 || wizard_add "[Test] Share mounted" 1
 			[[ -n "$STATIC_IP" ]] && {
@@ -554,7 +573,12 @@ run_tests_for_mode() {
 			test_config_dir && wizard_add "[Test] Config directory" 0 || wizard_add "[Test] Config directory" 1
 			;;
 		sunshine)
-			test_sunshine_service && wizard_add "[Test] Sunshine service active + autostart" 0 || wizard_add "[Test] Sunshine service" 1
+			if test_sunshine_service; then
+				wizard_add "[Test] Sunshine service active + autostart" 0
+			else
+				wizard_add "[Test] Sunshine service" 1
+				log "Hint: Sunshine may only become active after graphical login as $BOX_USER. After LightDM auto-login: sudo systemctl restart ${SUNSHINE_UNIT}"
+			fi
 			test_sunshine_http && wizard_add "[Test] Sunshine Web UI" 0 || wizard_add "[Test] Sunshine Web UI" 1
 			;;
 		smb)
@@ -623,11 +647,12 @@ prompt_full_config() {
 	read -rp "Static IP (leave blank for DHCP): " STATIC_IP
 	read -rp "Config mount path [/opt/86box/configs]: " CONFIG_PATH
 	CONFIG_PATH="${CONFIG_PATH:-/opt/86box/configs}"
-	read -rp "NFS/SMB share address (blank to skip, e.g. 192.168.1.10:/share or //server/share): " SHARE_ADDR
+	read -rp "NFS/SMB share (blank to skip). SMB: //host/share or //host/share/subfolder (not /share/...): " SHARE_ADDR
 	SHARE_TYPE="smb"
 	SMB_USER=""
 	SMB_PASS=""
 	SMB_DOMAIN=""
+	SMB_SHARE_SUBPATH=""
 	if [[ -n "$SHARE_ADDR" ]]; then
 		read -rp "Share type [nfs/smb, default smb]: " SHARE_TYPE
 		SHARE_TYPE="${SHARE_TYPE:-smb}"
@@ -643,6 +668,9 @@ prompt_full_config() {
 				echo ""
 				read -rp "SMB domain/workgroup (optional): " SMB_DOMAIN
 			fi
+			read -rp "Optional folder inside the share if not already in the path above (blank = none), e.g. sphere86_data: " SMB_SHARE_SUBPATH
+			SMB_SHARE_SUBPATH="${SMB_SHARE_SUBPATH##/}"
+			SMB_SHARE_SUBPATH="${SMB_SHARE_SUBPATH%%/}"
 		fi
 	fi
 }
@@ -680,7 +708,7 @@ prompt_smb_only() {
 	fi
 	read -rp "Config mount path [$CONFIG_PATH]: " _cp
 	[[ -n "$_cp" ]] && CONFIG_PATH="$_cp"
-	read -rp "NFS/SMB address (e.g. //server/share or host:/path): " SHARE_ADDR
+	read -rp "NFS/SMB address (SMB: //server/share or //server/share/subfolder): " SHARE_ADDR
 	[[ -z "$SHARE_ADDR" ]] && { err "Share address is required."; return 1; }
 	read -rp "Share type [nfs/smb, default smb]: " SHARE_TYPE
 	SHARE_TYPE="${SHARE_TYPE:-smb}"
@@ -691,6 +719,7 @@ prompt_smb_only() {
 	SMB_USER=""
 	SMB_PASS=""
 	SMB_DOMAIN=""
+	SMB_SHARE_SUBPATH=""
 	if [[ "$SHARE_TYPE" == "smb" ]]; then
 		read -rp "SMB username (blank = guest): " SMB_USER
 		if [[ -n "$SMB_USER" ]]; then
@@ -698,6 +727,9 @@ prompt_smb_only() {
 			echo ""
 			read -rp "SMB domain/workgroup (optional): " SMB_DOMAIN
 		fi
+		read -rp "Optional folder inside the share if not in path above (blank = none), e.g. sphere86_data: " SMB_SHARE_SUBPATH
+		SMB_SHARE_SUBPATH="${SMB_SHARE_SUBPATH##/}"
+		SMB_SHARE_SUBPATH="${SMB_SHARE_SUBPATH%%/}"
 	fi
 }
 
