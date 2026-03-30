@@ -402,6 +402,8 @@ ExecStartPre=/bin/bash -c 'for i in \$(seq 1 120); do [[ -S $xsock ]] && exit 0;
 ExecStart=$sunshine_bin
 Restart=on-failure
 RestartSec=5
+# Default TimeoutStartSec (90s) is shorter than ExecStartPre's up-to-120s X11 wait → "timeout exceeded" during install.
+TimeoutStartSec=300
 Environment=HOME=/home/$BOX_USER
 Environment=DISPLAY=$disp
 Environment=XAUTHORITY=/home/$BOX_USER/.Xauthority
@@ -470,6 +472,17 @@ CREDS
 		ok "Verified write access to $CONFIG_PATH as $BOX_USER"
 	else
 		warn "Cannot create a file in $CONFIG_PATH as $BOX_USER — check NAS/share permissions for this SMB user (Windows Explorer may use different credentials than Linux mount)."
+	fi
+
+	# Sphere86 stores VMs under vms/<uuid>/ — NAS ACLs on subfolders often differ from the share root.
+	local _vms="$CONFIG_PATH/vms"
+	mkdir -p "$_vms" 2>/dev/null || true
+	chown "$BOX_USER:$BOX_USER" "$_vms" 2>/dev/null || true
+	if sudo -u "$BOX_USER" mkdir -p "$_vms/.sphere86-acl-test" 2>/dev/null && sudo -u "$BOX_USER" touch "$_vms/.sphere86-acl-test/w" 2>/dev/null; then
+		rm -rf "$_vms/.sphere86-acl-test"
+		ok "Verified write access under $CONFIG_PATH/vms/ as $BOX_USER"
+	else
+		warn "Cannot write under $CONFIG_PATH/vms/ as $BOX_USER — on the NAS, grant this SMB user Modify/Write on the share and subfolders (Sphere86 needs vms/<uuid>/). 86Box may beep and stop if it cannot write logs/cfg next to the VM."
 	fi
 }
 

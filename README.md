@@ -74,16 +74,19 @@ In Docker, `DATABASE_URL` and `SHARE_ROOT` are set in `docker-compose.yml` / the
 
 ## Streaming host setup
 
-On a fresh **Debian 12** or **Ubuntu 22.04+** machine (as root):
+On a fresh **Debian 12** or **Ubuntu 22.04+** machine, download and run the wizard (replace `OWNER` with your GitHub user or organization — same idea as in the Unraid section below):
 
 ```bash
-sudo bash tools/scripts/sphere86-install-wizard.sh
+wget -O sphere86-install-wizard.sh "https://raw.githubusercontent.com/OWNER/sphere86/main/tools/scripts/sphere86-install-wizard.sh"
+chmod +x sphere86-install-wizard.sh
+sudo ./sphere86-install-wizard.sh
 ```
 
-Legacy entrypoint (same wizard):
+**If you already have the repository cloned** on the host:
 
 ```bash
-sudo bash tools/scripts/provision-streaming-host.sh
+chmod +x tools/scripts/sphere86-install-wizard.sh
+sudo ./tools/scripts/sphere86-install-wizard.sh
 ```
 
 The wizard supports a full install, 86Box-only, Sunshine-only, share-only, and static IP options, with post-steps tests and a **Passed / Failed** summary. It does **not** download ROM sets; provide ROMs through the Sphere86 UI or your share.
@@ -96,14 +99,14 @@ The wizard supports a full install, 86Box-only, Sunshine-only, share-only, and s
 4. **systemd-logind linger** for that user (optional; helps user runtime directories)  
 5. Optional static IP via Netplan  
 6. Latest 86Box Linux build from GitHub (ROM content is separate; ROM directory is linked under your config path)  
-7. Sunshine from LizardByte packages — `sphere86-sunshine.service` waits for the X11 socket, sets `DISPLAY=:0`, `XAUTHORITY`, and `XDG_RUNTIME_DIR` so streaming and launched apps see the same desktop  
+7. Sunshine from LizardByte packages — `sphere86-sunshine.service` waits for the X11 socket, sets `DISPLAY` (default `:0`; set during install if your session uses e.g. `:2.0`), `XAUTHORITY`, and `XDG_RUNTIME_DIR` so streaming and launched apps see the same desktop  
 8. Optional NFS or SMB mount for shared configs  
 9. Optional UFW rules for Sunshine / Moonlight ports  
 
 ### Moonlight / 86Box notes
 
 - **ROM path:** Sphere86 publishes Sunshine commands with **`-R`** pointing at `<host config base>/roms` (the same folder the wizard links to `/opt/86box/roms`). Keep ROM files there or re-point the host in the Sphere86 UI.  
-- **GUI / input:** 86Box is launched with **`DISPLAY=:0`** and **`QT_QPA_PLATFORM=xcb`** so it runs on the X session Sunshine captures. If you still see only a static desktop, **re-publish** the machine from Sphere86 so the updated command is sent to Sunshine.  
+- **GUI / input:** 86Box is launched with the host’s **X11 DISPLAY** (match `echo $DISPLAY` on the streaming host; set in Sphere86 per Sunshine host if not `:0`) and **`QT_QPA_PLATFORM=xcb`** so it runs on the X session Sunshine captures. If you still see only a static desktop, **re-publish** the machine from Sphere86 so the updated command is sent to Sunshine.  
 - **Auto-login:** Required for Moonlight when no one is at the physical console; the wizard configures LightDM accordingly. Re-run the wizard’s **Sunshine-only** or **full** path if you change the streaming user name.
 
 ### Workstation without Docker
@@ -142,7 +145,6 @@ src/
 tools/
 ├── scripts/
 │   ├── sphere86-install-wizard.sh
-│   ├── provision-streaming-host.sh
 │   └── parse_86box.py
 └── unraid/
     ├── sphere86.xml
