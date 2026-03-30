@@ -1,3 +1,4 @@
+import { dirname, join } from 'path';
 import { decrypt } from '../crypto/index.js';
 import { Agent } from 'undici';
 
@@ -130,16 +131,17 @@ export async function getApps(host: SunshineHost): Promise<SunshineApp[]> {
 }
 
 export async function addApp(host: SunshineHost, app: { name: string; cmd: string; workingDir?: string }): Promise<void> {
-	const body: Record<string, string | number> = {
+	const body: Record<string, string | number | boolean> = {
 		name: app.name,
 		output: '',
 		cmd: app.cmd,
 		index: -1,
-		'exclude-global-prep-cmd': 'false',
-		elevated: 'false',
-		'auto-detach': 'true',
-		'wait-all': 'true',
-		'exit-timeout': '5'
+		'exclude-global-prep-cmd': false,
+		elevated: false,
+		/** If true, Sunshine treats a process that exits with 0 within 5s as a detached “success” (hardcoded in Sunshine process.cpp). Set false so an early 86Box exit is not masked. */
+		'auto-detach': false,
+		'wait-all': true,
+		'exit-timeout': 60
 	};
 
 	if (app.workingDir) {
@@ -162,14 +164,15 @@ export async function getConfig(host: SunshineHost): Promise<Record<string, stri
 
 /**
  * Build the 86Box launch command for a Sunshine app (paths absolute on the streaming host).
- * - `-R` sets the machine-independent ROM directory (see 86Box docs: `--rompath`).
- * - `DISPLAY` / `QT_QPA_PLATFORM` are required so 86Box opens on the X11 session Sunshine captures
- *   (headless installs often lack these when the app is spawned from Sunshine).
+ * - `-R` / `--rompath` and `-C` / `--config` are official 86Box flags (see 86Box `src/86box.c` help text).
+ * - `-L` writes the 86Box log next to the VM config so you can inspect failures on the streaming host.
+ * - `DISPLAY` / `QT_QPA_PLATFORM` are required so 86Box opens on the X11 session Sunshine captures.
  */
 export function build86BoxCommand(
 	binaryPath: string,
 	configAbsolutePath: string,
 	romAbsolutePath: string
 ): string {
-	return `env DISPLAY=:0 QT_QPA_PLATFORM=xcb "${binaryPath}" -R "${romAbsolutePath}" -C "${configAbsolutePath}"`;
+	const logPath = join(dirname(configAbsolutePath), '86box-sphere86.log');
+	return `env DISPLAY=:0 QT_QPA_PLATFORM=xcb "${binaryPath}" -R "${romAbsolutePath}" -C "${configAbsolutePath}" -L "${logPath}"`;
 }

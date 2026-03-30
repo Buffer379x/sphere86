@@ -27,6 +27,36 @@ ok()   { echo -e "${COLOR_GREEN}[  OK  ]${COLOR_NC} $*"; }
 warn() { echo -e "${COLOR_YELLOW}[ WARN ]${COLOR_NC} $*"; }
 err()  { echo -e "${COLOR_RED}[ERROR ]${COLOR_NC} $*"; }
 
+# Log all output next to this script (override path with SPHERE86_INSTALL_LOG=...; disable with SPHERE86_NO_INSTALL_LOG=1).
+setup_install_log_tee() {
+	[[ "${SPHERE86_NO_INSTALL_LOG:-}" == "1" ]] && return 0
+	local script_dir logf
+	script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+	logf="${SPHERE86_INSTALL_LOG:-$script_dir/sphere86-install-wizard.log}"
+	if ! touch "$logf" 2>/dev/null; then
+		logf="/tmp/sphere86-install-wizard.log"
+		touch "$logf" 2>/dev/null || return 0
+	fi
+	exec > >(tee -a "$logf") 2>&1
+	echo "[$(date -Iseconds)] Sphere86 install wizard — full transcript: $logf"
+}
+
+# Optional delayed reboot (background). Cancel with: kill <PID>  (PID is printed).
+# Non-interactive: SPHERE86_POST_REBOOT_SEC=300
+prompt_optional_reboot() {
+	local sec="${SPHERE86_POST_REBOOT_SEC:-}"
+	if [[ -z "$sec" ]]; then
+		echo ""
+		read -rp "Schedule automatic reboot in the background (e.g. if noVNC/console stays black after upgrades)? Seconds, 0 = no [0]: " sec
+	fi
+	sec="${sec:-0}"
+	[[ "$sec" =~ ^[0-9]+$ ]] || return 0
+	[[ "$sec" -gt 0 ]] || return 0
+	( sleep "$sec" && /sbin/reboot ) &
+	local _rb_pid=$!
+	ok "Reboot scheduled in ${sec}s (background PID ${_rb_pid}). To cancel: kill ${_rb_pid}"
+}
+
 # --- Summary (Passed / Failed) ----------------------------------------------
 declare -a WIZARD_STEPS=()
 declare -a WIZARD_OK=()
@@ -634,6 +664,7 @@ do_full_install() {
 	log "Sunshine UI: https://$(hostname -I 2>/dev/null | awk '{print $1}'):47990"
 
 	run_tests_for_mode full
+	prompt_optional_reboot
 }
 
 do_86box_only() {
@@ -657,6 +688,7 @@ do_sunshine_only() {
 	write_sunshine_systemd && wizard_add "Sunshine service + autostart" 0 || wizard_add "Sunshine service + autostart" 1
 	save_install_conf
 	run_tests_for_mode sunshine
+	prompt_optional_reboot
 }
 
 do_smb_only() {
@@ -690,6 +722,7 @@ show_menu() {
 }
 
 main() {
+	setup_install_log_tee
 	preflight_root
 	log "Sphere86 Streaming Host - Wizard"
 	log "Target OS: Debian 12 / Ubuntu 22.04+"
