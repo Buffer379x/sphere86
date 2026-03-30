@@ -1,0 +1,22 @@
+services:
+  sphere86:
+    image: sphere86:latest
+    build: .
+    container_name: sphere86
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - SPHERE86_SECRET=${SPHERE86_SECRET:-change-me-in-production}
+      - DATABASE_URL=file:/data/config/sphere86.db
+      - SHARE_ROOT=/data
+      - NODE_ENV=production
+    volumes:
+      - /Users/branko.bordac/Documents/GitHub/sphere86_data:/data
+    # Used by Docker as the service health status (`docker compose ps`, orchestrators).
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3

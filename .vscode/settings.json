@@ -1,0 +1,4 @@
+{
+	"git.ignoredRepositories": ["**/Sphere86_legacy"],
+	"git.openRepositoryInParentFolders": "never"
+}

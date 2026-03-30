@@ -1,0 +1,11 @@
+# Local read-only reference (sibling clone; never commit)
+Sphere86_legacy/
+
+node_modules/
+build/
+.svelte-kit/
+data/
+.env
+*.db
+*.db-journal
+.DS_Store
