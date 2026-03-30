@@ -162,11 +162,15 @@ export async function getConfig(host: SunshineHost): Promise<Record<string, stri
 	return request<Record<string, string>>(host, '/api/config');
 }
 
+/** Shell prefix: DISPLAY + Qt + X11 cookie. Must match the user that owns the X session on :0 (same as Sunshine systemd `User=` / LightDM autologin). */
+const BOX_ENV_PREFIX =
+	'env DISPLAY=:0 QT_QPA_PLATFORM=xcb XAUTHORITY="${XAUTHORITY:-$HOME/.Xauthority}"';
+
 /**
  * Build the 86Box launch command for a Sunshine app (paths absolute on the streaming host).
  * - `-R` / `--rompath` and `-C` / `--config` are official 86Box flags (see 86Box `src/86box.c` help text).
  * - `-L` writes the 86Box log next to the VM config so you can inspect failures on the streaming host.
- * - `DISPLAY` / `QT_QPA_PLATFORM` are required so 86Box opens on the X11 session Sunshine captures.
+ * - `DISPLAY` / `QT_QPA_PLATFORM` / `XAUTHORITY` must match the X11 session user (Sunshine inherits `XAUTHORITY` from systemd; the `${XAUTHORITY:-$HOME/.Xauthority}` fallback helps when the command runs under `sh -c`).
  */
 export function build86BoxCommand(
 	binaryPath: string,
@@ -174,5 +178,5 @@ export function build86BoxCommand(
 	romAbsolutePath: string
 ): string {
 	const logPath = join(dirname(configAbsolutePath), '86box-sphere86.log');
-	return `env DISPLAY=:0 QT_QPA_PLATFORM=xcb "${binaryPath}" -R "${romAbsolutePath}" -C "${configAbsolutePath}" -L "${logPath}"`;
+	return `${BOX_ENV_PREFIX} "${binaryPath}" -R "${romAbsolutePath}" -C "${configAbsolutePath}" -L "${logPath}"`;
 }
