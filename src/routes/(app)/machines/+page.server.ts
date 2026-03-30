@@ -20,6 +20,7 @@ import { v4 as uuid } from 'uuid';
 import { writeFileSync, mkdirSync, unlinkSync, rmSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { env } from '$env/dynamic/private';
+import { chmodVmProfileTree } from '$lib/server/share-permissions.js';
 
 function loadHw() {
 	return isHardwareDbAvailable() ? loadHardwareDb() : null;
@@ -55,8 +56,10 @@ export const actions: Actions = {
 		const now = new Date().toISOString();
 
 		const dataRoot = env.SHARE_ROOT || './data';
-		mkdirSync(join(dataRoot, 'vms', id, 'hdd'), { recursive: true });
-		mkdirSync(join(dataRoot, 'vms', id, 'nvr'), { recursive: true });
+		const vmRoot = join(dataRoot, 'vms', id);
+		mkdirSync(join(vmRoot, 'hdd'), { recursive: true });
+		mkdirSync(join(vmRoot, 'nvr'), { recursive: true });
+		chmodVmProfileTree(vmRoot);
 
 		await db.insert(machineProfiles).values({
 			id, name, description, hostId,
@@ -111,8 +114,10 @@ export const actions: Actions = {
 		const now = new Date().toISOString();
 
 		const dataRoot = env.SHARE_ROOT || './data';
-		mkdirSync(join(dataRoot, 'vms', id, 'hdd'), { recursive: true });
-		mkdirSync(join(dataRoot, 'vms', id, 'nvr'), { recursive: true });
+		const vmRoot = join(dataRoot, 'vms', id);
+		mkdirSync(join(vmRoot, 'hdd'), { recursive: true });
+		mkdirSync(join(vmRoot, 'nvr'), { recursive: true });
+		chmodVmProfileTree(vmRoot);
 
 		await db.insert(machineProfiles).values({
 			id, name, description: 'Imported configuration',
@@ -141,6 +146,7 @@ export const actions: Actions = {
 		try {
 			mkdirSync(dirname(fullPath), { recursive: true });
 			writeFileSync(fullPath, profile.configContent, 'utf-8');
+			chmodVmProfileTree(dirname(fullPath));
 		} catch (err) {
 			return fail(500, { error: `Failed to write config: ${err instanceof Error ? err.message : 'Unknown error'}` });
 		}
