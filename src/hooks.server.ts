@@ -2,6 +2,7 @@ import type { Handle } from '@sveltejs/kit';
 import { sequence } from '@sveltejs/kit/hooks';
 import { validateSession, ensureDefaultAdminHashed } from '$lib/server/auth.js';
 import { refreshHardwareDb } from '$lib/server/86box/hardware-sync.js';
+import { startHostStatusPolling } from '$lib/server/host-poll.js';
 
 let initialized = false;
 
@@ -10,6 +11,7 @@ const init: Handle = async ({ event, resolve }) => {
 		await ensureDefaultAdminHashed();
 		// Start background hardware DB generation on first startup.
 		void refreshHardwareDb(false);
+		startHostStatusPolling();
 		initialized = true;
 	}
 	return resolve(event);

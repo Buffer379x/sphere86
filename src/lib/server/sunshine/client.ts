@@ -108,6 +108,22 @@ export async function testConnection(host: SunshineHost): Promise<{ ok: boolean;
 	}
 }
 
+/** Sunshine log file via Web UI API (GET /api/logs, text/plain). */
+export async function getSunshineLogs(host: SunshineHost): Promise<string> {
+	return request<string>(host, '/api/logs');
+}
+
+/**
+ * Restarts the Sunshine process (POST /api/restart).
+ * Server-side fetch sends no Origin/Referer, so CSRF is not required (see Sunshine confighttp.cpp).
+ */
+export async function restartSunshine(host: SunshineHost): Promise<void> {
+	await request(host, '/api/restart', {
+		method: 'POST',
+		body: '{}'
+	});
+}
+
 export async function getApps(host: SunshineHost): Promise<SunshineApp[]> {
 	const result = await request<SunshineAppsResponse>(host, '/api/apps');
 	return result.apps || [];
@@ -145,9 +161,15 @@ export async function getConfig(host: SunshineHost): Promise<Record<string, stri
 }
 
 /**
- * Build the 86Box launch command for a Sunshine app.
- * The config path is absolute on the streaming host.
+ * Build the 86Box launch command for a Sunshine app (paths absolute on the streaming host).
+ * - `-R` sets the machine-independent ROM directory (see 86Box docs: `--rompath`).
+ * - `DISPLAY` / `QT_QPA_PLATFORM` are required so 86Box opens on the X11 session Sunshine captures
+ *   (headless installs often lack these when the app is spawned from Sunshine).
  */
-export function build86BoxCommand(binaryPath: string, configAbsolutePath: string): string {
-	return `"${binaryPath}" -C "${configAbsolutePath}"`;
+export function build86BoxCommand(
+	binaryPath: string,
+	configAbsolutePath: string,
+	romAbsolutePath: string
+): string {
+	return `env DISPLAY=:0 QT_QPA_PLATFORM=xcb "${binaryPath}" -R "${romAbsolutePath}" -C "${configAbsolutePath}"`;
 }

@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import { goto } from '$app/navigation';
+	import { get } from 'svelte/store';
+	import { page } from '$app/stores';
 	import type { PageData, ActionData } from './$types';
 	import { notify } from '$stores/toast';
 	import JobsPanel from '$lib/components/JobsPanel.svelte';
@@ -26,9 +28,19 @@
 		const url = URL.createObjectURL(blob);
 		const a = document.createElement('a');
 		a.href = url;
-		a.download = `sphere86-${new Date().toISOString().slice(0, 10)}.log`;
+		const hostName = data.logHosts?.find((h) => h.id === data.logHostId)?.name;
+		a.download = data.logHostId
+			? `sunshine-${(hostName ?? 'host').replace(/\s+/g, '_')}.log`
+			: `sphere86-${new Date().toISOString().slice(0, 10)}.log`;
 		a.click();
 		URL.revokeObjectURL(url);
+	}
+
+	function setLogSource(hostId: string | null) {
+		const u = new URL(get(page).url.href);
+		if (hostId) u.searchParams.set('logHost', hostId);
+		else u.searchParams.delete('logHost');
+		goto(u.pathname + u.search, { replaceState: true, keepFocus: true, noScroll: true });
 	}
 
 	$effect(() => {
@@ -225,15 +237,37 @@
 	{/if}
 
 	{#if activeTab === 'logs'}
-		<div class="card-elevated">
-			<div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between mb-4">
-				<div class="min-w-0 flex-1">
-					<h2 class="text-base font-semibold">Application log</h2>
-					<p class="text-xs mt-1 leading-relaxed" style="color: var(--theme-on-surface-variant);">
-						Daily files <span class="font-mono">sphere86-YYYY-MM-DD.log</span> (UTC); same calendar day appends across restarts.
-						View merges the last 7 days. Older daily files are zipped into <span class="font-mono">logs/archive/</span> (up to 30 archives, oldest removed).
-						Panel actions appear as <span class="font-mono">[INFO] AUDIT</span> lines.
-					</p>
+		<div class="card-elevated flex flex-col min-h-0">
+			<div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between mb-4 shrink-0">
+				<div class="min-w-0 flex-1 space-y-3">
+					<div>
+						<label for="logSource" class="label text-xs">Log source</label>
+						<select
+							id="logSource"
+							class="input-field text-sm max-w-md mt-1"
+							value={data.logHostId ?? ''}
+							onchange={(e) => setLogSource((e.currentTarget as HTMLSelectElement).value || null)}
+						>
+							<option value="">Sphere86 — application log</option>
+							{#each data.logHosts ?? [] as h}
+								<option value={h.id}>{h.name} — Sunshine (remote)</option>
+							{/each}
+						</select>
+					</div>
+					<h2 class="text-base font-semibold">
+						{data.logHostId ? 'Sunshine log (remote)' : 'Application log'}
+					</h2>
+					{#if data.logHostId}
+						<p class="text-xs mt-1 leading-relaxed" style="color: var(--theme-on-surface-variant);">
+							Fetched from the Sunshine host via <span class="font-mono">GET /api/logs</span> (same file as the Sunshine Web UI). Pause/resume only affects auto-scroll after refresh.
+						</p>
+					{:else}
+						<p class="text-xs mt-1 leading-relaxed" style="color: var(--theme-on-surface-variant);">
+							Daily files <span class="font-mono">sphere86-YYYY-MM-DD.log</span> (UTC); same calendar day appends across restarts.
+							View merges the last 7 days. Older daily files are zipped into <span class="font-mono">logs/archive/</span> (up to 30 archives, oldest removed).
+							Panel actions appear as <span class="font-mono">[INFO] AUDIT</span> lines.
+						</p>
+					{/if}
 				</div>
 				<div class="flex gap-2 shrink-0">
 					<button onclick={() => logPaused = !logPaused}
@@ -253,10 +287,16 @@
 					</button>
 				</div>
 			</div>
+			{#if data.logSourceError}
+				<div class="text-sm py-2 px-3 rounded-md mb-3 shrink-0"
+					 style="background: color-mix(in srgb, var(--theme-error) 15%, transparent); color: var(--theme-error);">
+					{data.logSourceError}
+				</div>
+			{/if}
 			<pre bind:this={logEl}
-				 class="text-xs font-mono p-4 rounded-lg overflow-auto"
-				 style="background: var(--theme-surface-lowest); color: var(--theme-on-surface); max-height: 60vh; min-height: 300px;"
-			>{logContent || 'No log entries yet. Logs are written when actions are performed.'}</pre>
+				 class="text-xs font-mono p-4 rounded-lg overflow-auto min-h-[300px] flex-1"
+				 style="background: var(--theme-surface-lowest); color: var(--theme-on-surface); height: calc(100dvh - 16rem); max-height: calc(100dvh - 9rem);"
+			>{logContent || (data.logHostId ? 'No log content returned.' : 'No log entries yet. Logs are written when actions are performed.')}</pre>
 		</div>
 	{/if}
 </div>

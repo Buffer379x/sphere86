@@ -480,7 +480,7 @@
 										class="text-xs px-2 py-0.5 rounded-full"
 										style="background: color-mix(in srgb, var(--theme-primary) 15%, transparent); color: var(--theme-primary);"
 									>
-										Sunshine
+										Published
 									</span>
 								{/if}
 							</div>

@@ -10,9 +10,17 @@ import { readLogTail } from '$lib/server/logger.js';
 import { env } from '$env/dynamic/private';
 import { refreshHardwareDb as regenerateHardwareDb } from '$lib/server/86box/hardware-sync.js';
 import { isHardwareDbAvailable } from '$lib/server/86box/hardware-db.js';
+import { streamingHosts } from '$lib/server/db/schema.js';
+import { eq } from 'drizzle-orm';
+import {
+	getSunshineLogs,
+	parseSunshineScheme,
+	type SunshineHost
+} from '$lib/server/sunshine/client.js';
 
 export const load: PageServerLoad = async ({ url, locals }) => {
 	const changePasswordPrompt = url.searchParams.get('changePassword') === '1';
+	const logHostId = url.searchParams.get('logHost')?.trim() || '';
 
 	let latestRelease = null;
 	let latestRoms = null;
@@ -22,8 +30,35 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 
 	const allSettings = await db.select().from(settings).all();
 	const settingsMap = Object.fromEntries(allSettings.map(s => [s.key, s.value]));
-	const logContent = readLogTail(500);
 	const jobsList = await listJobs(100);
+
+	const hostRows = await db.select().from(streamingHosts).all();
+	const logHosts = hostRows.map((h) => ({ id: h.id, name: h.name }));
+
+	let logContent = readLogTail(500);
+	let logSourceError: string | null = null;
+
+	if (logHostId) {
+		const row = await db.select().from(streamingHosts).where(eq(streamingHosts.id, logHostId)).get();
+		if (row) {
+			const sunshineHost: SunshineHost = {
+				address: row.address,
+				port: row.port,
+				username: row.username,
+				credentialEncrypted: row.credentialEncrypted,
+				tlsVerify: row.tlsVerify,
+				sunshineScheme: parseSunshineScheme(row.sunshineScheme)
+			};
+			try {
+				logContent = await getSunshineLogs(sunshineHost);
+			} catch (err) {
+				logSourceError = err instanceof Error ? err.message : 'Failed to load Sunshine logs.';
+				logContent = '';
+			}
+		} else {
+			logSourceError = 'Host not found.';
+		}
+	}
 
 	return {
 		changePasswordPrompt,
@@ -33,6 +68,9 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 		shareRoot: env.SHARE_ROOT || '(not configured)',
 		currentUsername: locals.user?.username || 'admin',
 		logContent,
+		logHosts,
+		logHostId: logHostId || null,
+		logSourceError,
 		jobs: jobsList,
 		hardwareDbAvailable: isHardwareDbAvailable()
 	};

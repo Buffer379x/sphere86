@@ -90,13 +90,21 @@ The wizard supports a full install, 86Box-only, Sunshine-only, share-only, and s
 
 ### What the wizard installs (full run)
 
-1. Base desktop stack (X11, audio) and tools  
+1. Base desktop stack (X11, Xfce, LightDM, audio) and tools  
 2. Dedicated Linux user for 86Box / Sunshine  
-3. Optional static IP via Netplan  
-4. Latest 86Box Linux build from GitHub (ROM content is separate)  
-5. Sunshine from LizardByte packages, systemd unit `sphere86-sunshine.service` (enabled, started)  
-6. Optional NFS or SMB mount for shared configs  
-7. Optional UFW rules for Sunshine / Moonlight ports  
+3. **LightDM auto-login** for that user so an X11 session exists at boot (fixes “no monitor” in Moonlight until someone logs in via noVNC)  
+4. **systemd-logind linger** for that user (optional; helps user runtime directories)  
+5. Optional static IP via Netplan  
+6. Latest 86Box Linux build from GitHub (ROM content is separate; ROM directory is linked under your config path)  
+7. Sunshine from LizardByte packages — `sphere86-sunshine.service` waits for the X11 socket, sets `DISPLAY=:0`, `XAUTHORITY`, and `XDG_RUNTIME_DIR` so streaming and launched apps see the same desktop  
+8. Optional NFS or SMB mount for shared configs  
+9. Optional UFW rules for Sunshine / Moonlight ports  
+
+### Moonlight / 86Box notes
+
+- **ROM path:** Sphere86 publishes Sunshine commands with **`-R`** pointing at `<host config base>/roms` (the same folder the wizard links to `/opt/86box/roms`). Keep ROM files there or re-point the host in the Sphere86 UI.  
+- **GUI / input:** 86Box is launched with **`DISPLAY=:0`** and **`QT_QPA_PLATFORM=xcb`** so it runs on the X session Sunshine captures. If you still see only a static desktop, **re-publish** the machine from Sphere86 so the updated command is sent to Sunshine.  
+- **Auto-login:** Required for Moonlight when no one is at the physical console; the wizard configures LightDM accordingly. Re-run the wizard’s **Sunshine-only** or **full** path if you change the streaming user name.
 
 ### Workstation without Docker
 

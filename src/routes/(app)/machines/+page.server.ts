@@ -164,7 +164,8 @@ export const actions: Actions = {
 		if (!host) return fail(404, { error: 'Host not found.' });
 
 		const configAbsPath = join(host.configBasePath, profile.deployPath);
-		const cmd = build86BoxCommand(host.binaryPath, configAbsPath);
+		const romAbsPath = join(host.configBasePath, 'roms');
+		const cmd = build86BoxCommand(host.binaryPath, configAbsPath, romAbsPath);
 
 		const sunshineHost: SunshineHost = {
 			address: host.address,

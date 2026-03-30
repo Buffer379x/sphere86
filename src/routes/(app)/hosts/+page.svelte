@@ -22,6 +22,8 @@
 		if (form?.error) notify('error', form.error);
 		if (form?.testError) notify('error', `Connection failed: ${form.testError}`);
 		if (form?.testSuccess) notify('success', 'Connection successful!');
+		if (form?.restartError) notify('error', `Restart failed: ${form.restartError}`);
+		if (form?.restartSuccess) notify('success', 'Sunshine restart requested.');
 	});
 
 	$effect(() => {
@@ -86,10 +88,16 @@
 						</span>
 					{/if}
 
-					<div class="flex gap-2">
+					<div class="flex gap-2 flex-wrap">
 						<form method="POST" action="?/test" use:enhance>
 							<input type="hidden" name="id" value={host.id} />
 							<button type="submit" class="btn-secondary text-xs py-1 px-3">Test</button>
+						</form>
+						<form method="POST" action="?/restartSunshine" use:enhance>
+							<input type="hidden" name="id" value={host.id} />
+							<button type="submit" class="btn-secondary text-xs py-1 px-3" title="POST /api/restart on this host">
+								Restart Sunshine
+							</button>
 						</form>
 						<button class="btn-secondary text-xs py-1 px-3"
 								onclick={() => { editingId = host.id; showCreate = false; }}>

@@ -68,6 +68,7 @@ wizard_print_summary() {
 
 # --- Configuration (persistent metadata, no passwords) -----------------------
 BOX_USER="${BOX_USER:-sphere86}"
+SUNSHINE_UI_USER="${SUNSHINE_UI_USER:-admin}"
 CONFIG_PATH="${CONFIG_PATH:-/opt/86box/configs}"
 HOSTNAME_INPUT="${HOSTNAME_INPUT:-streaming-host}"
 SHARE_ADDR="${SHARE_ADDR:-}"
@@ -86,6 +87,7 @@ save_install_conf() {
 # Sphere86 install wizard (no passwords; reference only)
 HOSTNAME_INPUT=$HOSTNAME_INPUT
 BOX_USER=$BOX_USER
+SUNSHINE_UI_USER=$SUNSHINE_UI_USER
 CONFIG_PATH=$CONFIG_PATH
 SHARE_ADDR=$SHARE_ADDR
 SHARE_TYPE=$SHARE_TYPE
@@ -141,6 +143,34 @@ ensure_user() {
 	else
 		warn "User $BOX_USER already exists (password unchanged)."
 	fi
+}
+
+# LightDM: auto-login so an X session (and virtual monitor for Sunshine) exists at boot without manual login.
+configure_lightdm_autologin() {
+	if ! command -v lightdm &>/dev/null && [[ ! -x /usr/sbin/lightdm ]]; then
+		warn "LightDM not installed; skipping auto-login (install desktop stack via full install first)."
+		return 0
+	fi
+	log "Configuring LightDM auto-login for $BOX_USER..."
+	mkdir -p /etc/lightdm/lightdm.conf.d
+	cat > /etc/lightdm/lightdm.conf.d/50-sphere86-autologin.conf <<LIDM
+# Sphere86: graphical session must be active for Sunshine/Moonlight (no physical monitor required).
+[Seat:*]
+autologin-user=$BOX_USER
+autologin-user-timeout=0
+user-session=xfce
+LIDM
+	systemctl enable lightdm 2>/dev/null || true
+	systemctl restart lightdm 2>/dev/null || true
+	sleep 3
+}
+
+# Allow user@ services / runtime dirs without an active SSH login (optional but helps).
+enable_user_linger() {
+	if command -v loginctl &>/dev/null; then
+		loginctl enable-linger "$BOX_USER" 2>/dev/null || warn "Could not enable linger for $BOX_USER (optional)."
+	fi
+	return 0
 }
 
 # ---------------------------------------------------------------------------
@@ -266,33 +296,40 @@ SUNCONF
 	chown -R "$BOX_USER:$BOX_USER" "$SUNSHINE_CONFIG_DIR"
 
 	if command -v sunshine >/dev/null 2>&1; then
-		sudo -u "$BOX_USER" sunshine --creds "$BOX_USER" "$SUNSHINE_PASS" >/dev/null 2>&1 || \
-			warn "Could not set Sunshine credentials automatically. Run: sudo -u $BOX_USER sunshine --creds $BOX_USER <password>"
+		sudo -u "$BOX_USER" sunshine --creds "$SUNSHINE_UI_USER" "$SUNSHINE_PASS" >/dev/null 2>&1 || \
+			warn "Could not set Sunshine credentials automatically. Run: sudo -u $BOX_USER sunshine --creds $SUNSHINE_UI_USER <password>"
 	fi
 }
 
 write_sunshine_systemd() {
-	local sunshine_bin
+	local sunshine_bin box_uid
 	sunshine_bin="$(command -v sunshine || true)"
 	if [[ -z "$sunshine_bin" ]]; then
 		err "Sunshine binary not found in PATH."
 		return 1
 	fi
+	box_uid="$(id -u "$BOX_USER")"
 	cat > "/etc/systemd/system/${SUNSHINE_UNIT}" <<SERVICE
 [Unit]
 Description=Sunshine (Sphere86)
-After=network-online.target
+After=network-online.target display-manager.service
 Wants=network-online.target
+# Wait for LightDM so :0 and ~/.Xauthority exist for the auto-logged-in user.
 
 [Service]
 Type=simple
 User=$BOX_USER
 Group=$BOX_USER
 WorkingDirectory=/home/$BOX_USER
+# Wait until X11 socket exists (autologin session); avoids "no monitor" until manual login.
+ExecStartPre=/bin/bash -c 'for i in \$(seq 1 120); do [[ -S /tmp/.X11-unix/X0 ]] && exit 0; sleep 1; done; echo "X11 socket not ready"; exit 1'
 ExecStart=$sunshine_bin
 Restart=on-failure
-RestartSec=3
+RestartSec=5
 Environment=HOME=/home/$BOX_USER
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=/home/$BOX_USER/.Xauthority
+Environment=XDG_RUNTIME_DIR=/run/user/${box_uid}
 
 [Install]
 WantedBy=multi-user.target
@@ -431,16 +468,47 @@ run_tests_for_mode() {
 # ---------------------------------------------------------------------------
 # Prompts
 # ---------------------------------------------------------------------------
+prompt_linux_account() {
+	echo ""
+	log "Linux account for the graphical desktop session, 86Box, and Sunshine (systemd service)"
+	read -rp "Use the current Linux user for this install (recommended if you invoked sudo from a normal account)? [Y/n]: " _use_cur
+	if [[ "${_use_cur,,}" == "n" ]]; then
+		read -rp "Linux username to create for 86Box / Sunshine: " BOX_USER
+		BOX_USER="${BOX_USER:-sphere86}"
+		read -rp "Password for Linux user '$BOX_USER': " -s BOX_PASS
+		echo ""
+		BOX_PASS="${BOX_PASS:-sphere86}"
+	else
+		if [[ -n "${SUDO_USER:-}" && "$SUDO_USER" != "root" ]]; then
+			BOX_USER="$SUDO_USER"
+			log "Using Linux user: $BOX_USER"
+		else
+			read -rp "Linux username for the desktop session (e.g. sphere86): " BOX_USER
+			BOX_USER="${BOX_USER:-sphere86}"
+		fi
+		read -rp "Password for Linux user '$BOX_USER' (only used if this account is newly created): " -s BOX_PASS
+		echo ""
+		BOX_PASS="${BOX_PASS:-sphere86}"
+	fi
+}
+
+prompt_sunshine_web_ui() {
+	echo ""
+	log "Sunshine Web UI (https://<this-host>:47990) — the login here may differ from the Linux system user above."
+	read -rp "Sunshine Web UI username [admin]: " SUNSHINE_UI_USER
+	SUNSHINE_UI_USER="${SUNSHINE_UI_USER:-admin}"
+	read -rp "Sunshine Web UI password [sunshine]: " SUNSHINE_PASS
+	SUNSHINE_PASS="${SUNSHINE_PASS:-sunshine}"
+	echo ""
+}
+
 prompt_full_config() {
 	echo ""
 	log "Full installation - input values"
 	read -rp "Hostname [streaming-host]: " HOSTNAME_INPUT
 	HOSTNAME_INPUT="${HOSTNAME_INPUT:-streaming-host}"
-	read -rp "User for 86Box/Sunshine [sphere86]: " BOX_USER
-	BOX_USER="${BOX_USER:-sphere86}"
-	read -rp "Password for $BOX_USER: " -s BOX_PASS
-	echo ""
-	BOX_PASS="${BOX_PASS:-sphere86}"
+	prompt_linux_account
+	prompt_sunshine_web_ui
 	read -rp "Static IP (leave blank for DHCP): " STATIC_IP
 	read -rp "Config mount path [/opt/86box/configs]: " CONFIG_PATH
 	CONFIG_PATH="${CONFIG_PATH:-/opt/86box/configs}"
@@ -466,21 +534,17 @@ prompt_full_config() {
 			fi
 		fi
 	fi
-	read -rp "Sunshine Web UI password [sunshine]: " SUNSHINE_PASS
-	SUNSHINE_PASS="${SUNSHINE_PASS:-sunshine}"
-	echo ""
 }
 
 prompt_minimal_user() {
 	if ! load_install_conf; then
-		read -rp "User for 86Box/Sunshine [sphere86]: " BOX_USER
-		BOX_USER="${BOX_USER:-sphere86}"
+		prompt_linux_account
 	else
 		log "Using install.conf: BOX_USER=$BOX_USER"
+		read -rp "Password for user $BOX_USER (only needed for newly created user): " -s BOX_PASS
+		echo ""
+		BOX_PASS="${BOX_PASS:-sphere86}"
 	fi
-	read -rp "Password for user $BOX_USER (only needed for newly created user): " -s BOX_PASS
-	echo ""
-	BOX_PASS="${BOX_PASS:-sphere86}"
 	read -rp "Config path [/opt/86box/configs]: " CONFIG_PATH
 	CONFIG_PATH="${CONFIG_PATH:-/opt/86box/configs}"
 }
@@ -489,11 +553,9 @@ prompt_sunshine_only() {
 	if load_install_conf; then
 		log "Using install.conf: BOX_USER=$BOX_USER"
 	else
-		read -rp "User for Sunshine [sphere86]: " BOX_USER
-		BOX_USER="${BOX_USER:-sphere86}"
+		prompt_linux_account
 	fi
-	read -rp "Sunshine Web UI password [sunshine]: " SUNSHINE_PASS
-	SUNSHINE_PASS="${SUNSHINE_PASS:-sunshine}"
+	prompt_sunshine_web_ui
 }
 
 prompt_smb_only() {
@@ -549,6 +611,9 @@ do_full_install() {
 		apply_static_ip && wizard_add "Apply static IP $STATIC_IP" 0 || wizard_add "Apply static IP" 1
 	fi
 
+	configure_lightdm_autologin && wizard_add "LightDM auto-login (X session for Moonlight)" 0 || wizard_add "LightDM auto-login" 1
+	enable_user_linger && wizard_add "logind linger for $BOX_USER" 0 || wizard_add "logind linger" 1
+
 	install_86box_binary && wizard_add "Install 86Box" 0 || wizard_add "Install 86Box" 1
 	link_rom_path && wizard_add "Link ROM path (content managed by Sphere86)" 0 || wizard_add "Link ROM path" 1
 
@@ -585,6 +650,8 @@ do_sunshine_only() {
 	wizard_reset
 	prompt_sunshine_only
 	ensure_user || true
+	configure_lightdm_autologin && wizard_add "LightDM auto-login (X session for Moonlight)" 0 || wizard_add "LightDM auto-login" 1
+	enable_user_linger && wizard_add "logind linger for $BOX_USER" 0 || wizard_add "logind linger" 1
 	install_sunshine_deb && wizard_add "Install Sunshine package" 0 || wizard_add "Install Sunshine package" 1
 	configure_sunshine_files && wizard_add "Configure Sunshine files" 0 || wizard_add "Configure Sunshine files" 1
 	write_sunshine_systemd && wizard_add "Sunshine service + autostart" 0 || wizard_add "Sunshine service + autostart" 1

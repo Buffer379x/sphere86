@@ -7,6 +7,7 @@ import { encrypt } from '$lib/server/crypto/index.js';
 import {
 	testConnection,
 	parseSunshineScheme,
+	restartSunshine,
 	type SunshineHost,
 	type SunshineScheme
 } from '$lib/server/sunshine/client.js';
@@ -108,6 +109,41 @@ export const actions: Actions = {
 			return fail(502, { testError: result.error || 'Connection failed' });
 		}
 		return { testSuccess: true };
+	},
+
+	restartSunshine: async ({ request, locals }) => {
+		const data = await request.formData();
+		const id = data.get('id')?.toString();
+		if (!id) return fail(400, { error: 'Missing host ID.' });
+
+		const host = await db.select().from(streamingHosts).where(eq(streamingHosts.id, id)).get();
+		if (!host) return fail(404, { error: 'Host not found.' });
+
+		const sunshineHost: SunshineHost = {
+			address: host.address,
+			port: host.port,
+			username: host.username,
+			credentialEncrypted: host.credentialEncrypted,
+			tlsVerify: host.tlsVerify,
+			sunshineScheme: parseSunshineScheme(host.sunshineScheme)
+		};
+
+		try {
+			await restartSunshine(sunshineHost);
+		} catch (err) {
+			return fail(502, {
+				restartError: err instanceof Error ? err.message : 'Restart failed'
+			});
+		}
+
+		const now = new Date().toISOString();
+		await db
+			.update(streamingHosts)
+			.set({ updatedAt: now, lastCheckedAt: now, status: 'online' })
+			.where(eq(streamingHosts.id, id));
+
+		await logAudit(locals.user?.id ?? null, 'restart_sunshine', 'streaming_host', id, host.name);
+		return { restartSuccess: true };
 	},
 
 	update: async ({ request, locals }) => {
