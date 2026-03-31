@@ -236,14 +236,21 @@ install_86box() {
 	log "Installing 86Box latest Linux/AppImage release..."
 	local api json url file candidate
 	api="https://api.github.com/repos/86Box/86Box/releases/latest"
-	json="$(curl -fsSL "$api")"
+	json="$(curl_github_json "$api" 2>/dev/null || true)"
+	if [[ -z "${json}" ]]; then
+		log "WARNING: Could not fetch 86Box release info (API unavailable or rate-limited). Skipping."
+		return 1
+	fi
 	url="$(echo "$json" | jq -r '.assets[] | select(.name | test("Linux.*x86_64|\\.AppImage$")) | .browser_download_url' | head -1)"
 	if [[ -z "${url}" || "${url}" == "null" ]]; then
 		log "No 86Box Linux asset found."
 		return 1
 	fi
 	file="/tmp/86box-asset"
-	curl -fsSL "$url" -o "$file"
+	if ! curl -fsSL "$url" -o "$file"; then
+		log "WARNING: 86Box download failed."
+		return 1
+	fi
 	mkdir -p /opt/86box/bin
 	if [[ "${url}" == *.tar.gz ]]; then
 		tar -xzf "$file" -C /opt/86box/bin
@@ -367,8 +374,8 @@ prepare_data_layout() {
 }
 
 main() {
-	install_sunshine
-	install_86box
+	install_sunshine || log "WARNING: Sunshine installation failed. Will retry on next start."
+	install_86box || log "WARNING: 86Box installation failed. Download it from the Settings page."
 	ensure_user
 	prepare_data_layout
 	write_sunshine_config
