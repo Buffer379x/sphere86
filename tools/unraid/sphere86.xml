@@ -25,6 +25,9 @@
   <Config Name="Sunshine Discovery Port (UDP)" Target="47984" Default="47984" Mode="udp" Description="Sunshine discovery UDP port" Type="Port" Display="advanced" Required="true" Mask="false"/>
   <Config Name="Sunshine Stream Port (UDP)" Target="47989" Default="47989" Mode="udp" Description="Sunshine stream/session UDP port" Type="Port" Display="advanced" Required="true" Mask="false"/>
   <Config Name="Sunshine Control Port" Target="48010" Default="48010" Mode="tcp" Description="Sunshine control TCP port" Type="Port" Display="advanced" Required="true" Mask="false"/>
+  <Config Name="uinput Device" Target="/dev/uinput" Default="/dev/uinput" Mode="rw" Description="Virtual input device for Sunshine mouse/keyboard passthrough" Type="Device" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="uhid Device" Target="/dev/uhid" Default="/dev/uhid" Mode="rw" Description="Virtual HID device used by Sunshine controllers/input backends" Type="Device" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="ALSA Device" Target="/dev/snd" Default="/dev/snd" Mode="rw" Description="Optional host audio device passthrough for container audio" Type="Device" Display="advanced" Required="false" Mask="false"/>
   <Config Name="Sphere86 Data" Target="/data/sphere86" Default="/mnt/user/appdata/sphere86/sphere86" Mode="rw" Description="Persistent Sphere86 app data (DB/logs/cache)" Type="Path" Display="always" Required="true" Mask="false"/>
   <Config Name="Sunshine Data" Target="/data/sunshine" Default="/mnt/user/appdata/sphere86/sunshine" Mode="rw" Description="Persistent Sunshine config and credentials" Type="Path" Display="always" Required="true" Mask="false"/>
   <Config Name="86Box Data" Target="/data/86box" Default="/mnt/user/appdata/sphere86/86box" Mode="rw" Description="Persistent 86Box VMs and ROM store" Type="Path" Display="always" Required="true" Mask="false"/>

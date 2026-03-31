@@ -24,6 +24,7 @@ This folder contains `sphere86.xml`, a template compatible with Unraid’s **Com
 | **Sphere86 Web UI** port `3000` | Publishes the Sphere86 HTTP port. |
 | **Sunshine API/Web UI** port `47990` | Publishes Sunshine API + HTTPS UI. |
 | **Sunshine stream/discovery ports** | Publishes Moonlight-relevant ports (`47984`, `47989`, `48010`, plus UDP mappings). |
+| **Optional devices** | `/dev/uinput`, `/dev/uhid`, `/dev/snd` for input/audio passthrough in constrained hosts. |
 | **Sphere86 Data** → `/data/sphere86` | Persistent volume for SQLite, logs and cache. |
 | **Sunshine Data** → `/data/sunshine` | Persistent Sunshine config and credentials. |
 | **86Box Data** → `/data/86box` | Persistent VM configs/images and ROM storage. |
