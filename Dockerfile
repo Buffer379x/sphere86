@@ -22,6 +22,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxtst6 xdotool xinput \
     && rm -rf /var/lib/apt/lists/*
 
+# Newer Sunshine releases (>= v2025.924) require GLIBCXX_3.4.32 which Bookworm
+# does not ship. Pull libstdc++6 from Trixie (backward compatible).
+RUN echo "deb http://deb.debian.org/debian trixie main" > /etc/apt/sources.list.d/trixie.list \
+    && printf 'Package: *\nPin: release n=trixie\nPin-Priority: -1\n\nPackage: libstdc++6\nPin: release n=trixie\nPin-Priority: 500\n' \
+       > /etc/apt/preferences.d/trixie-libstdcpp \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends libstdc++6 \
+    && rm -f /etc/apt/sources.list.d/trixie.list /etc/apt/preferences.d/trixie-libstdcpp \
+    && apt-get update \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 COPY --from=builder /app/build ./build

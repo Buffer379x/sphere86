@@ -67,7 +67,8 @@ curl_github_json() {
 
 find_deb_url_in_release() {
 	# $1 = release JSON, $2 = arch
-	# Try asset names in priority order for compatibility with our base image (Debian bookworm).
+	# Stdout is captured by the caller — only echo the final URL to stdout.
+	# All log/diagnostic output MUST go to stderr (>&2).
 	local json="$1" arch="$2"
 	local distro=""
 	if [[ -f /etc/os-release ]]; then
@@ -86,7 +87,7 @@ find_deb_url_in_release() {
 		local found
 		found="$(echo "${json}" | jq -r --arg n "${name}" '.assets[] | select(.name == $n) | .browser_download_url' 2>/dev/null | head -1)"
 		if [[ -n "${found}" && "${found}" != "null" ]]; then
-			log "Matched asset: ${name}"
+			log "Matched asset: ${name}" >&2
 			echo "${found}"
 			return 0
 		fi
