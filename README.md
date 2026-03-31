@@ -132,7 +132,7 @@ Additional embedded-mode variables:
 | `SPHERE86_EMBEDDED_SUNSHINE_SCHEME` | `auto` | `http`, `https`, or `auto` |
 | `SUNSHINE_CONFIG_BASE_PATH` | `/data/sunshine` | Persistent Sunshine config root |
 | `SUNSHINE_STREAM_PORT` | `47989` | Moonlight streaming/discovery port base written into Sunshine config |
-| `SPHERE86_FORCE_XTEST_INPUT` | `true` | Forces Sunshine to avoid `/dev/uinput` and use XTest fallback (recommended for Xvfb-based embedded mode) |
+| `SPHERE86_FORCE_XTEST_INPUT` | `false` | If `true`, blocks `/dev/uinput`/`/dev/uhid` to force Sunshine XTest fallback. Keep `false` for normal mouse/keyboard injection. |
 | `SUNSHINE_WEB_USERNAME` | `admin` | Initial Sunshine Web UI user |
 | `SUNSHINE_WEB_PASSWORD` | `sunshine` | Initial Sunshine Web UI password |
 | `SUNSHINE_FORCE_INIT_CREDS` | `false` | If `true`, re-runs `sunshine --creds` on startup (normally skipped to preserve pairing state) |
