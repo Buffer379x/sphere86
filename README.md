@@ -130,6 +130,7 @@ Additional embedded-mode variables:
 | `SPHERE86_EMBEDDED_SUNSHINE_SCHEME` | `auto` | `http`, `https`, or `auto` |
 | `SUNSHINE_CONFIG_BASE_PATH` | `/data/sunshine` | Persistent Sunshine config root |
 | `SUNSHINE_STREAM_PORT` | `47989` | Moonlight streaming/discovery port base written into Sunshine config |
+| `SPHERE86_FORCE_XTEST_INPUT` | `true` | Forces Sunshine to avoid `/dev/uinput` and use XTest fallback (recommended for Xvfb-based embedded mode) |
 | `SUNSHINE_WEB_USERNAME` | `admin` | Initial Sunshine Web UI user |
 | `SUNSHINE_WEB_PASSWORD` | `sunshine` | Initial Sunshine Web UI password |
 | `SUNSHINE_INSTALL_METHOD` | `auto` | `auto` tries `.deb` first then AppImage fallback; `deb` or `appimage` force method |

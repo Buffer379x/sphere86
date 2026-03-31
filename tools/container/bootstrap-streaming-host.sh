@@ -291,6 +291,10 @@ origin_web_ui_allowed = lan
 upnp = off
 port = ${SUNSHINE_STREAM_PORT}
 system_tray = disabled
+controller = enabled
+keyboard = enabled
+mouse = enabled
+native_pen_touch = disabled
 EOF
 	chown -R "${BOX_USER}:${BOX_USER}" "${BOX_HOME}/.config"
 }
