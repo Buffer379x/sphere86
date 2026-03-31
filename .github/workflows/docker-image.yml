@@ -2,7 +2,11 @@ name: Build and Publish Docker Image
 
 on:
   push:
-    branches: [ "main" ]
+    branches: 
+      - main
+      - beta
+    tags:
+      - 'v*'
 
 jobs:
   build-and-push:
@@ -19,6 +23,29 @@ jobs:
       - name: Lowercase repository name
         run: echo "REPO_LC=${GITHUB_REPOSITORY,,}" >> ${GITHUB_ENV}
 
+      - name: Define Docker Tags
+        id: define_tags
+        run: |
+          # Fallback: Wenn auf main gepusht wird
+          TAGS="ghcr.io/${{ env.REPO_LC }}:latest"
+
+          if [[ "${{ github.ref }}" == "refs/heads/beta" ]]; then
+            TAGS="ghcr.io/${{ env.REPO_LC }}:beta"
+            
+          elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/}
+            
+            if [[ "$VERSION" == *"-beta"* ]]; then
+              # Es ist ein Beta-Release
+              TAGS="ghcr.io/${{ env.REPO_LC }}:${VERSION},ghcr.io/${{ env.REPO_LC }}:beta"
+            else
+              # Es ist ein Stable-Release
+              TAGS="ghcr.io/${{ env.REPO_LC }}:${VERSION},ghcr.io/${{ env.REPO_LC }}:latest"
+            fi
+          fi
+          
+          echo "tags=${TAGS}" >> $GITHUB_OUTPUT
+
       - name: Log in to the Container registry
         uses: docker/login-action@v3
         with:
@@ -31,4 +58,4 @@ jobs:
         with:
           context: .
           push: true
-          tags: ghcr.io/${{ env.REPO_LC }}:latest
+          tags: ${{ steps.define_tags.outputs.tags }}
