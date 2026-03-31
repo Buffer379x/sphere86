@@ -6,7 +6,7 @@ DISPLAY_VAL="${SPHERE86_EMBEDDED_X11_DISPLAY:-:0}"
 XDG_RUNTIME_DIR="/run/user/$(id -u "${BOX_USER}" 2>/dev/null || echo 1000)"
 XVFB_SCREEN="${SPHERE86_XVFB_SCREEN:-1920x1080x24}"
 PULSE_SERVER="unix:${XDG_RUNTIME_DIR}/pulse/native"
-FORCE_XTEST_INPUT="${SPHERE86_FORCE_XTEST_INPUT:-false}"
+FORCE_XTEST_INPUT="${SPHERE86_FORCE_XTEST_INPUT:-true}"
 
 log() { echo "[entrypoint] $*"; }
 
@@ -126,7 +126,7 @@ main() {
 	run_as_user_bg "export XDG_RUNTIME_DIR='${XDG_RUNTIME_DIR}'; pulseaudio --daemonize=yes --exit-idle-time=-1 --log-target=stderr"
 
 	log "Starting Xvfb on ${DISPLAY_VAL} (${XVFB_SCREEN})..."
-	run_as_user_bg "export DISPLAY='${DISPLAY_VAL}'; export XDG_RUNTIME_DIR='${XDG_RUNTIME_DIR}'; export PULSE_SERVER='${PULSE_SERVER}'; Xvfb '${DISPLAY_VAL}' -screen 0 '${XVFB_SCREEN}' -ac +extension GLX +render -noreset"
+	run_as_user_bg "export DISPLAY='${DISPLAY_VAL}'; export XDG_RUNTIME_DIR='${XDG_RUNTIME_DIR}'; export PULSE_SERVER='${PULSE_SERVER}'; Xvfb '${DISPLAY_VAL}' -screen 0 '${XVFB_SCREEN}' -ac +extension GLX +extension XTEST +render -noreset"
 
 	sleep 1
 	log "Starting lightweight X session..."

@@ -132,7 +132,7 @@ Additional embedded-mode variables:
 | `SPHERE86_EMBEDDED_SUNSHINE_SCHEME` | `auto` | `http`, `https`, or `auto` |
 | `SUNSHINE_CONFIG_BASE_PATH` | `/data/sunshine` | Persistent Sunshine config root |
 | `SUNSHINE_STREAM_PORT` | `47989` | Moonlight streaming/discovery port base written into Sunshine config |
-| `SPHERE86_FORCE_XTEST_INPUT` | `false` | If `true`, blocks `/dev/uinput`/`/dev/uhid` to force Sunshine XTest fallback. Keep `false` for normal mouse/keyboard injection. |
+| `SPHERE86_FORCE_XTEST_INPUT` | `true` | Blocks `/dev/uinput`/`/dev/uhid` so Sunshine uses XTest for mouse/keyboard (required for Xvfb). Set `false` only when using a real Xorg display. |
 | `SUNSHINE_WEB_USERNAME` | `admin` | Initial Sunshine Web UI user |
 | `SUNSHINE_WEB_PASSWORD` | `sunshine` | Initial Sunshine Web UI password |
 | `SUNSHINE_FORCE_INIT_CREDS` | `false` | If `true`, re-runs `sunshine --creds` on startup (normally skipped to preserve pairing state) |
@@ -159,6 +159,14 @@ Moonlight pairing persistence notes:
 - Keep `/data/sunshine` on a persistent host volume.
 - Bootstrap applies `SUNSHINE_WEB_USERNAME` / `SUNSHINE_WEB_PASSWORD` only on first initialization.
 - Re-running credentials explicitly (`SUNSHINE_FORCE_INIT_CREDS=true`) can require re-pairing Moonlight clients.
+
+Input in embedded mode (Xvfb):
+
+- Xvfb does **not** read from kernel input devices (`/dev/input/event*`), so uinput virtual devices alone cannot deliver keyboard/mouse events.
+- Sunshine uses **XTest** (`libXtst`) to inject keyboard and mouse events directly into the X server.
+- `SPHERE86_FORCE_XTEST_INPUT=true` (the default) blocks `/dev/uinput` so Sunshine reliably falls back to the XTest path.
+- `libxtst6` is installed in the image to ensure the XTest library is always available.
+- The `xdotool` package is included for manual diagnostics (`DISPLAY=:0 xdotool key a`).
 
 ## Streaming host setup
 
