@@ -2,12 +2,12 @@ import { mkdirSync, existsSync, statSync } from 'fs';
 import { join } from 'path';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
-import { env } from '$env/dynamic/private';
 import { log } from '$lib/server/logger.js';
 import { getHardwareDbPath, reloadHardwareDb } from './hardware-db.js';
+import { SPHERE86_DATA_ROOT } from '$lib/server/runtime-paths.js';
 
 const execFileAsync = promisify(execFile);
-const dataRoot = env.SHARE_ROOT || './data';
+const dataRoot = SPHERE86_DATA_ROOT;
 const cacheDir = join(dataRoot, 'cache', '_86box_src');
 const configDir = join(dataRoot, 'config');
 const parserScript = join(process.cwd(), 'scripts', 'parse_86box.py');

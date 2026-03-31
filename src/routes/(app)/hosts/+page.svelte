@@ -76,8 +76,6 @@
 							>
 								{host.address}:{host.port}
 							</a>
-							<span class="mx-1">&middot;</span>
-							{host.configBasePath}
 						</p>
 					</div>
 
@@ -85,6 +83,12 @@
 						<span class="text-xs px-2 py-1 rounded-full"
 							  style="background: color-mix(in srgb, var(--theme-secondary) 15%, transparent); color: var(--theme-secondary);">
 							Sunshine {host.sunshineVersion}
+						</span>
+					{/if}
+					{#if host.managed}
+						<span class="text-xs px-2 py-1 rounded-full"
+							  style="background: color-mix(in srgb, var(--theme-primary) 14%, transparent); color: var(--theme-primary);">
+							Embedded
 						</span>
 					{/if}
 
@@ -99,27 +103,29 @@
 								Restart Sunshine
 							</button>
 						</form>
-						<button class="btn-secondary text-xs py-1 px-3"
-								onclick={() => { editingId = host.id; showCreate = false; }}>
-							Edit
-						</button>
-						<form method="POST" action="?/delete" use:enhance>
-							<input type="hidden" name="id" value={host.id} />
-							<button
-								type="button"
-								class="btn-secondary text-xs py-1 px-3"
-								style="color: var(--theme-error); border-color: color-mix(in srgb, var(--theme-error) 30%, transparent);"
-								onclick={(e) => {
-									const f = (e.currentTarget as HTMLButtonElement).closest('form');
-									if (!f) return;
-									hostFormToSubmit = f;
-									deleteHostMessage = `Delete Sunshine host “${host.name}”? This cannot be undone.`;
-									deleteHostOpen = true;
-								}}
-							>
-								Delete
+						{#if !host.managed}
+							<button class="btn-secondary text-xs py-1 px-3"
+									onclick={() => { editingId = host.id; showCreate = false; }}>
+								Edit
 							</button>
-						</form>
+							<form method="POST" action="?/delete" use:enhance>
+								<input type="hidden" name="id" value={host.id} />
+								<button
+									type="button"
+									class="btn-secondary text-xs py-1 px-3"
+									style="color: var(--theme-error); border-color: color-mix(in srgb, var(--theme-error) 30%, transparent);"
+									onclick={(e) => {
+										const f = (e.currentTarget as HTMLButtonElement).closest('form');
+										if (!f) return;
+										hostFormToSubmit = f;
+										deleteHostMessage = `Delete Sunshine host “${host.name}”? This cannot be undone.`;
+										deleteHostOpen = true;
+									}}
+								>
+									Delete
+								</button>
+							</form>
+						{/if}
 					</div>
 				</div>
 			{/each}
@@ -211,16 +217,6 @@
 						<input id="password" name="password" type="password" class="input-field"
 							   placeholder={editingId ? '(unchanged)' : 'Sunshine password'} />
 					</div>
-					<div>
-						<label for="configBasePath" class="label">Config Base Path (on host)</label>
-						<input id="configBasePath" name="configBasePath" type="text" class="input-field"
-							   placeholder="/opt/86box/configs" value={editing?.configBasePath ?? '/opt/86box/configs'} />
-					</div>
-					<div>
-						<label for="binaryPath" class="label">86Box Binary Path</label>
-						<input id="binaryPath" name="binaryPath" type="text" class="input-field"
-							   placeholder="/usr/local/bin/86Box" value={editing?.binaryPath ?? '/usr/local/bin/86Box'} />
-					</div>
 					<div class="md:col-span-2">
 						<label for="x11Display" class="label">X11 DISPLAY (streaming host)</label>
 						<input id="x11Display" name="x11Display" type="text" class="input-field"
@@ -237,7 +233,7 @@
 							label="Start 86Box fullscreen (-F) when publishing"
 						/>
 						<p class="text-xs mt-2 ml-[4.5rem]" style="color: var(--theme-on-surface-variant);">
-							Re-publish a machine after changing this or the binary path so Sunshine gets the new command.
+							Re-publish a machine after changing this so Sunshine gets the new command.
 						</p>
 					</div>
 					<div class="pt-5">

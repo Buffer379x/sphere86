@@ -5,9 +5,10 @@ import { migrate } from './migrate.js';
 import { env } from '$env/dynamic/private';
 import { mkdirSync } from 'fs';
 import { dirname, join } from 'path';
+import { SPHERE86_DATA_ROOT } from '$lib/server/runtime-paths.js';
 
 const dbPath = (env.DATABASE_URL || 'file:./data/config/sphere86.db').replace('file:', '');
-const dataRoot = env.SHARE_ROOT || dirname(dirname(dbPath));
+const dataRoot = SPHERE86_DATA_ROOT;
 
 // Ensure standard folder structure
 const dirs = ['vms', 'roms', 'logs', 'config', 'cache'];

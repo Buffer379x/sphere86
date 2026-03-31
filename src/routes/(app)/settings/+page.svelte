@@ -21,6 +21,8 @@
 		if (form?.jobStarted) notify('info', 'Job started. Check the Jobs tab in Settings.');
 		if (form?.ok === true) notify('success', form.message ?? 'Hardware database updated.');
 		if (form?.ok === false) notify('error', form.message ?? 'Hardware database refresh failed.');
+		if (form?.embeddedConfigSaved) notify('success', 'Embedded Sunshine configuration saved.');
+		if (form?.embeddedConfigError) notify('error', form.embeddedConfigError);
 	});
 
 	function downloadLog() {
@@ -155,7 +157,7 @@
 				</div>
 				<div class="space-y-1">
 					<p class="text-xs uppercase tracking-wider" style="color: var(--theme-on-surface-variant);">Data Root</p>
-					<p class="text-sm font-mono">{data.shareRoot}</p>
+					<p class="text-sm font-mono">{data.dataRoot}</p>
 				</div>
 			</div>
 			<p class="text-xs mt-4" style="color: var(--theme-on-surface-variant);">
@@ -169,6 +171,70 @@
 				</form>
 			</div>
 		</div>
+
+		{#if data.embeddedHostEnabled}
+			<div class="card-elevated">
+				<h2 class="text-base font-semibold mb-2">Embedded Sunshine Host</h2>
+				{#if data.embeddedHost}
+					<p class="text-sm mb-4" style="color: var(--theme-on-surface-variant);">
+						Managed host: <span class="font-mono">{data.embeddedHost.address}:{data.embeddedHost.port}</span>
+					</p>
+					{#if data.embeddedSunshineConfigError}
+						<div class="text-sm py-2 px-3 rounded-md mb-3"
+							 style="background: color-mix(in srgb, var(--theme-warning) 15%, transparent); color: var(--theme-warning);">
+							{data.embeddedSunshineConfigError}
+						</div>
+					{/if}
+					<form method="POST" action="?/updateEmbeddedSunshine" use:enhance class="space-y-4">
+						<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+							<div>
+								<label for="apiPort" class="label">Sunshine API port</label>
+								<input
+									id="apiPort"
+									name="apiPort"
+									type="number"
+									min="1024"
+									max="65535"
+									class="input-field"
+									value={data.embeddedSunshineConfig?.port ?? data.embeddedHost.port}
+								/>
+							</div>
+							<div>
+								<label for="originWebUiAllowed" class="label">Web UI origin policy</label>
+								<select
+									id="originWebUiAllowed"
+									name="originWebUiAllowed"
+									class="input-field"
+									value={data.embeddedSunshineConfig?.origin_web_ui_allowed ?? 'lan'}
+								>
+									<option value="lan">LAN</option>
+									<option value="pc">This PC only</option>
+									<option value="wan">WAN (least restrictive)</option>
+								</select>
+							</div>
+							<div>
+								<label for="upnp" class="label">UPnP</label>
+								<select id="upnp" name="upnp" class="input-field" value={data.embeddedSunshineConfig?.upnp ?? 'off'}>
+									<option value="off">Off</option>
+									<option value="on">On</option>
+								</select>
+							</div>
+							<div class="flex items-end">
+								<label class="inline-flex items-center gap-2 text-sm" style="color: var(--theme-on-surface);">
+									<input type="checkbox" name="restartAfterSave" />
+									Restart Sunshine after save
+								</label>
+							</div>
+						</div>
+						<button type="submit" class="btn-secondary text-sm">Save embedded Sunshine settings</button>
+					</form>
+				{:else}
+					<p class="text-sm" style="color: var(--theme-on-surface-variant);">
+						Embedded mode is enabled via environment, but no managed host record exists yet.
+					</p>
+				{/if}
+			</div>
+		{/if}
 
 		<div class="card-elevated">
 			<h2 class="text-base font-semibold mb-4">Hardware database</h2>

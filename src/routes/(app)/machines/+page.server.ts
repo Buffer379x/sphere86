@@ -25,8 +25,13 @@ import { logAudit } from '$lib/server/audit.js';
 import { v4 as uuid } from 'uuid';
 import { writeFileSync, mkdirSync, unlinkSync, rmSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
-import { env } from '$env/dynamic/private';
 import { chmodVmProfileTree } from '$lib/server/share-permissions.js';
+import {
+	SPHERE86_DATA_ROOT,
+	BOX86_CONFIG_BASE_PATH,
+	BOX86_ROMS_PATH,
+	BOX86_BINARY_PATH
+} from '$lib/server/runtime-paths.js';
 
 function loadHw() {
 	return isHardwareDbAvailable() ? loadHardwareDb() : null;
@@ -61,7 +66,7 @@ export const actions: Actions = {
 		const deployPath = `vms/${id}/86box.cfg`;
 		const now = new Date().toISOString();
 
-		const dataRoot = env.SHARE_ROOT || './data';
+		const dataRoot = SPHERE86_DATA_ROOT;
 		const vmRoot = join(dataRoot, 'vms', id);
 		mkdirSync(join(vmRoot, 'hdd'), { recursive: true });
 		mkdirSync(join(vmRoot, 'nvr'), { recursive: true });
@@ -119,7 +124,7 @@ export const actions: Actions = {
 		const id = uuid();
 		const now = new Date().toISOString();
 
-		const dataRoot = env.SHARE_ROOT || './data';
+		const dataRoot = SPHERE86_DATA_ROOT;
 		const vmRoot = join(dataRoot, 'vms', id);
 		mkdirSync(join(vmRoot, 'hdd'), { recursive: true });
 		mkdirSync(join(vmRoot, 'nvr'), { recursive: true });
@@ -147,7 +152,7 @@ export const actions: Actions = {
 		const host = await db.select().from(streamingHosts).where(eq(streamingHosts.id, profile.hostId)).get();
 		if (!host) return fail(404, { error: 'Host not found.' });
 
-		const dataRoot = env.SHARE_ROOT || './data';
+		const dataRoot = SPHERE86_DATA_ROOT;
 		const fullPath = join(dataRoot, profile.deployPath);
 		try {
 			mkdirSync(dirname(fullPath), { recursive: true });
@@ -175,10 +180,10 @@ export const actions: Actions = {
 		const host = await db.select().from(streamingHosts).where(eq(streamingHosts.id, profile.hostId)).get();
 		if (!host) return fail(404, { error: 'Host not found.' });
 
-		const configAbsPath = join(host.configBasePath, profile.deployPath);
-		const romAbsPath = join(host.configBasePath, 'roms');
+		const configAbsPath = join(BOX86_CONFIG_BASE_PATH, profile.deployPath);
+		const romAbsPath = BOX86_ROMS_PATH;
 		const startFs = host.box86StartFullscreen !== false;
-		const cmd = build86BoxCommand(host.binaryPath, configAbsPath, romAbsPath, host.x11Display, startFs);
+		const cmd = build86BoxCommand(BOX86_BINARY_PATH, configAbsPath, romAbsPath, host.x11Display, startFs);
 		const appName = `86Box: ${profile.name}`;
 		const workingDir = dirname(configAbsPath);
 
@@ -267,7 +272,7 @@ export const actions: Actions = {
 		const profile = await db.select().from(machineProfiles).where(eq(machineProfiles.id, id)).get();
 		if (!profile) return fail(404, { error: 'Profile not found.' });
 
-		const dataRoot = env.SHARE_ROOT || './data';
+		const dataRoot = SPHERE86_DATA_ROOT;
 		const cfgAbs = join(dataRoot, profile.deployPath);
 		const vmDirAbs = join(dataRoot, 'vms', id);
 

@@ -33,6 +33,8 @@ export function migrate(sqlite: Database.Database) {
 		CREATE TABLE IF NOT EXISTS streaming_hosts (
 			id TEXT PRIMARY KEY,
 			name TEXT NOT NULL,
+			managed INTEGER NOT NULL DEFAULT 0,
+			managed_kind TEXT NOT NULL DEFAULT '',
 			address TEXT NOT NULL,
 			port INTEGER NOT NULL DEFAULT 47990,
 			username TEXT NOT NULL DEFAULT '',
@@ -106,6 +108,12 @@ function ensureStreamingHostColumns(sqlite: Database.Database) {
 	const names = new Set(cols.map((c) => c.name));
 	if (!names.has('sunshine_scheme')) {
 		sqlite.exec(`ALTER TABLE streaming_hosts ADD COLUMN sunshine_scheme TEXT NOT NULL DEFAULT 'auto'`);
+	}
+	if (!names.has('managed')) {
+		sqlite.exec(`ALTER TABLE streaming_hosts ADD COLUMN managed INTEGER NOT NULL DEFAULT 0`);
+	}
+	if (!names.has('managed_kind')) {
+		sqlite.exec(`ALTER TABLE streaming_hosts ADD COLUMN managed_kind TEXT NOT NULL DEFAULT ''`);
 	}
 	if (!names.has('x11_display')) {
 		sqlite.exec(`ALTER TABLE streaming_hosts ADD COLUMN x11_display TEXT NOT NULL DEFAULT ':0'`);

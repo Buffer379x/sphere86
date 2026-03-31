@@ -191,6 +191,14 @@ export async function getConfig(host: SunshineHost): Promise<Record<string, stri
 	return request<Record<string, string>>(host, '/api/config');
 }
 
+/** POST /api/config merges/updates Sunshine runtime config keys. */
+export async function updateConfig(host: SunshineHost, patch: Record<string, string>): Promise<void> {
+	await request(host, '/api/config', {
+		method: 'POST',
+		body: JSON.stringify(patch)
+	});
+}
+
 /** Normalize host UI input: `:2`, `2`, `:2.0` → `:2.0` style for env DISPLAY. */
 export function normalizeX11Display(raw: string | null | undefined): string {
 	const t = raw?.trim() || '';

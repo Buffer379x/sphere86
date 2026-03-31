@@ -15,6 +15,7 @@ import {
 import { logAudit } from '$lib/server/audit.js';
 import { v4 as uuid } from 'uuid';
 import { isIPv6 } from 'node:net';
+import { BOX86_BINARY_PATH, BOX86_CONFIG_BASE_PATH } from '$lib/server/runtime-paths.js';
 
 /** Browser link: explicit HTTPS/HTTP; Auto uses HTTP (typical LAN Sunshine without TLS). */
 function schemeForOpenLink(scheme: SunshineScheme): 'http' | 'https' {
@@ -49,8 +50,6 @@ export const actions: Actions = {
 		const password = data.get('password')?.toString() || '';
 		const tlsVerify = data.get('tlsVerify') === 'on';
 		const sunshineScheme = parseSunshineScheme(data.get('sunshineScheme')?.toString());
-		const configBasePath = data.get('configBasePath')?.toString().trim() || '/opt/86box/configs';
-		const binaryPath = data.get('binaryPath')?.toString().trim() || '/usr/local/bin/86Box';
 		const x11Display = normalizeX11Display(data.get('x11Display')?.toString());
 		const box86StartFullscreen = data.get('box86StartFullscreen') === 'on';
 
@@ -64,7 +63,7 @@ export const actions: Actions = {
 		await db.insert(streamingHosts).values({
 			id, name, address, port, username,
 			credentialEncrypted: encrypt(password),
-			tlsVerify, sunshineScheme, configBasePath, binaryPath, x11Display, box86StartFullscreen,
+			tlsVerify, sunshineScheme, configBasePath: BOX86_CONFIG_BASE_PATH, binaryPath: BOX86_BINARY_PATH, x11Display, box86StartFullscreen,
 			status: 'unknown', createdAt: now, updatedAt: now
 		});
 
@@ -77,6 +76,11 @@ export const actions: Actions = {
 		const id = data.get('id')?.toString();
 		if (!id) return fail(400, { error: 'Missing host ID.' });
 
+		const existing = await db.select().from(streamingHosts).where(eq(streamingHosts.id, id)).get();
+		if (existing?.managed) {
+			return fail(400, { error: 'Managed embedded hosts cannot be deleted.' });
+		}
+
 		await db.delete(streamingHosts).where(eq(streamingHosts.id, id));
 		await logAudit(locals.user?.id ?? null, 'delete', 'streaming_host', id);
 		return { success: true };
@@ -86,7 +90,6 @@ export const actions: Actions = {
 		const data = await request.formData();
 		const id = data.get('id')?.toString();
 		if (!id) return fail(400, { error: 'Missing host ID.' });
-
 		const host = await db.select().from(streamingHosts).where(eq(streamingHosts.id, id)).get();
 		if (!host) return fail(404, { error: 'Host not found.' });
 
@@ -161,10 +164,14 @@ export const actions: Actions = {
 		const password = data.get('password')?.toString();
 		const tlsVerify = data.get('tlsVerify') === 'on';
 		const sunshineScheme = parseSunshineScheme(data.get('sunshineScheme')?.toString());
-		const configBasePath = data.get('configBasePath')?.toString().trim() || '/opt/86box/configs';
-		const binaryPath = data.get('binaryPath')?.toString().trim() || '/usr/local/bin/86Box';
 		const x11Display = normalizeX11Display(data.get('x11Display')?.toString());
 		const box86StartFullscreen = data.get('box86StartFullscreen') === 'on';
+
+		const existing = await db.select().from(streamingHosts).where(eq(streamingHosts.id, id)).get();
+		if (!existing) return fail(404, { error: 'Host not found.' });
+		if (existing.managed) {
+			return fail(400, { error: 'Managed embedded hosts are configured from environment variables.' });
+		}
 
 		if (!name || !address) {
 			return fail(400, { error: 'Name and address are required.' });
@@ -177,8 +184,8 @@ export const actions: Actions = {
 			username,
 			tlsVerify,
 			sunshineScheme,
-			configBasePath,
-			binaryPath,
+			configBasePath: BOX86_CONFIG_BASE_PATH,
+			binaryPath: BOX86_BINARY_PATH,
 			x11Display,
 			box86StartFullscreen,
 			updatedAt: new Date().toISOString()

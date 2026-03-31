@@ -1,10 +1,10 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
-import { env } from '$env/dynamic/private';
 import { log } from '$lib/server/logger.js';
 import { busLabel, withBusGroups, BUS_SLOTS } from '$lib/86box/bus-groups.js';
+import { SPHERE86_DATA_ROOT } from '$lib/server/runtime-paths.js';
 
-const dataRoot = env.SHARE_ROOT || './data';
+const dataRoot = SPHERE86_DATA_ROOT;
 const DB_PATH = join(dataRoot, 'config', '86box_hardware_db.json');
 
 export { BUS_SLOTS, busLabel, withBusGroups };

@@ -4,13 +4,42 @@ services:
     build: .
     container_name: sphere86
     restart: unless-stopped
+    privileged: true
+    shm_size: "1gb"
     ports:
       - "3000:3000"
+      - "47984:47984/tcp"
+      - "47989:47989/tcp"
+      - "47990:47990/tcp"
+      - "47991:47991/tcp"
+      - "48010:48010/tcp"
+      - "47984:47984/udp"
+      - "47989:47989/udp"
+      - "47998-48010:47998-48010/udp"
     environment:
       - SPHERE86_SECRET=${SPHERE86_SECRET:-change-me-in-production}
       - DATABASE_URL=file:/data/config/sphere86.db
-      - SHARE_ROOT=/data
+      - SPHERE86_DATA_ROOT=/data
       - NODE_ENV=production
+      - SPHERE86_SINGLE_IMAGE_MODE=true
+      - SPHERE86_EMBEDDED_HOST=true
+      - SPHERE86_EMBEDDED_HOST_NAME=${SPHERE86_EMBEDDED_HOST_NAME:-Embedded Local Host}
+      - SPHERE86_EMBEDDED_HOST_ADDRESS=127.0.0.1
+      - SPHERE86_EMBEDDED_HOST_PORT=47990
+      - SPHERE86_EMBEDDED_SUNSHINE_SCHEME=auto
+      - SPHERE86_EMBEDDED_CONFIG_BASE_PATH=/data
+      - SPHERE86_EMBEDDED_86BOX_BINARY_PATH=/usr/local/bin/86Box
+      - SPHERE86_EMBEDDED_X11_DISPLAY=:0
+      - BOX86_CONFIG_BASE_PATH=/data
+      - BOX86_BINARY_PATH=/usr/local/bin/86Box
+      - BOX86_ROMS_PATH=/opt/86box/roms
+      - SUNSHINE_STREAM_PORT=47989
+      - SUNSHINE_WEB_USERNAME=${SUNSHINE_WEB_USERNAME:-admin}
+      - SUNSHINE_WEB_PASSWORD=${SUNSHINE_WEB_PASSWORD:-sunshine}
+      # Optional: temporary GitHub API token to avoid low anonymous rate limits during bootstrap.
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
+      - GITHUB_API_TOKEN=${GITHUB_API_TOKEN:-}
+      - BOX_USER=${BOX_USER:-sphere86}
     volumes:
       # Set SPHERE86_DATA_DIR in a .env file before first start.
       - ${SPHERE86_DATA_DIR:-/SET_THIS_PATH_FOR_SPHERE86_DATA}:/data

@@ -26,6 +26,10 @@ export const settings = sqliteTable('settings', {
 export const streamingHosts = sqliteTable('streaming_hosts', {
 	id: text('id').primaryKey(),
 	name: text('name').notNull(),
+	/** True when Sphere86 owns lifecycle (embedded local streaming host). */
+	managed: integer('managed', { mode: 'boolean' }).notNull().default(false),
+	/** Reserved values: '', 'embedded'. */
+	managedKind: text('managed_kind').notNull().default(''),
 	address: text('address').notNull(),
 	port: integer('port').notNull().default(47990),
 	username: text('username').notNull().default(''),

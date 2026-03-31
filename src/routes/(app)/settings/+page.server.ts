@@ -7,16 +7,29 @@ import { getLatest86BoxRelease, getLatestRomsRelease, findLinuxAsset, findRomsAs
 import { createJob, updateJob, listJobs, deleteJob } from '$lib/server/jobs/manager.js';
 import { logAudit } from '$lib/server/audit.js';
 import { readLogTail } from '$lib/server/logger.js';
-import { env } from '$env/dynamic/private';
 import { refreshHardwareDb as regenerateHardwareDb } from '$lib/server/86box/hardware-sync.js';
 import { isHardwareDbAvailable } from '$lib/server/86box/hardware-db.js';
 import { streamingHosts } from '$lib/server/db/schema.js';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import {
 	getSunshineLogs,
+	getConfig,
 	parseSunshineScheme,
+	restartSunshine,
+	updateConfig,
 	type SunshineHost
 } from '$lib/server/sunshine/client.js';
+import { embeddedHostEnabled } from '$lib/server/embedded-host.js';
+import { BOX86_ROMS_PATH, SPHERE86_DATA_ROOT } from '$lib/server/runtime-paths.js';
+
+async function getEmbeddedHostRow() {
+	const row = await db
+		.select()
+		.from(streamingHosts)
+		.where(and(eq(streamingHosts.managed, true), eq(streamingHosts.managedKind, 'embedded')))
+		.get();
+	return row ?? null;
+}
 
 export const load: PageServerLoad = async ({ url, locals }) => {
 	const changePasswordPrompt = url.searchParams.get('changePassword') === '1';
@@ -34,6 +47,9 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 
 	const hostRows = await db.select().from(streamingHosts).all();
 	const logHosts = hostRows.map((h) => ({ id: h.id, name: h.name }));
+	const embeddedHost = await getEmbeddedHostRow();
+	let embeddedSunshineConfig: Record<string, string> | null = null;
+	let embeddedSunshineConfigError: string | null = null;
 
 	let logContent = readLogTail(500);
 	let logSourceError: string | null = null;
@@ -60,17 +76,38 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 		}
 	}
 
+	if (embeddedHost) {
+		const embeddedSunshineHost: SunshineHost = {
+			address: embeddedHost.address,
+			port: embeddedHost.port,
+			username: embeddedHost.username,
+			credentialEncrypted: embeddedHost.credentialEncrypted,
+			tlsVerify: embeddedHost.tlsVerify,
+			sunshineScheme: parseSunshineScheme(embeddedHost.sunshineScheme)
+		};
+		try {
+			embeddedSunshineConfig = await getConfig(embeddedSunshineHost);
+		} catch (err) {
+			embeddedSunshineConfigError =
+				err instanceof Error ? err.message : 'Failed to read Sunshine configuration.';
+		}
+	}
+
 	return {
 		changePasswordPrompt,
 		latestRelease,
 		latestRoms,
 		settings: settingsMap,
-		shareRoot: env.SHARE_ROOT || '(not configured)',
+		dataRoot: SPHERE86_DATA_ROOT,
 		currentUsername: locals.user?.username || 'admin',
 		logContent,
 		logHosts,
 		logHostId: logHostId || null,
 		logSourceError,
+		embeddedHost,
+		embeddedHostEnabled: embeddedHostEnabled(),
+		embeddedSunshineConfig,
+		embeddedSunshineConfigError,
 		jobs: jobsList,
 		hardwareDbAvailable: isHardwareDbAvailable()
 	};
@@ -134,10 +171,9 @@ export const actions: Actions = {
 				const response = await fetch(asset.downloadUrl);
 				if (!response.ok) throw new Error(`Download failed: ${response.status}`);
 
-				const dataRoot = env.SHARE_ROOT || './data';
 				const { writeFileSync, mkdirSync } = await import('fs');
 				const { join } = await import('path');
-				const dir = join(dataRoot, 'cache', '86box');
+				const dir = join(SPHERE86_DATA_ROOT, 'cache', '86box');
 				mkdirSync(dir, { recursive: true });
 				const buffer = Buffer.from(await response.arrayBuffer());
 				writeFileSync(join(dir, asset.name), buffer);
@@ -170,22 +206,26 @@ export const actions: Actions = {
 				const response = await fetch(asset.downloadUrl);
 				if (!response.ok) throw new Error(`Download failed: ${response.status}`);
 
-				const dataRoot = env.SHARE_ROOT || './data';
-				const { writeFileSync, mkdirSync } = await import('fs');
+				const { writeFileSync, mkdirSync, existsSync, rmSync } = await import('fs');
 				const { join } = await import('path');
-				const romsDir = join(dataRoot, 'roms');
+				const romsDir = BOX86_ROMS_PATH;
 				mkdirSync(romsDir, { recursive: true });
 				const buffer = Buffer.from(await response.arrayBuffer());
-				writeFileSync(join(romsDir, asset.name), buffer);
+				const archivePath = join(SPHERE86_DATA_ROOT, 'cache', 'roms', asset.name);
+				mkdirSync(join(SPHERE86_DATA_ROOT, 'cache', 'roms'), { recursive: true });
+				writeFileSync(archivePath, buffer);
 
 				await updateJob(job.id, { progress: 0.8, message: 'Extracting ROM set...' });
+				// Refresh ROM folder to keep extracted standard path deterministic.
+				if (existsSync(romsDir)) rmSync(romsDir, { recursive: true, force: true });
+				mkdirSync(romsDir, { recursive: true });
 
 				if (asset.name.endsWith('.zip')) {
 					const extractZip = (await import('extract-zip')).default;
-					await extractZip(join(romsDir, asset.name), { dir: romsDir });
+					await extractZip(archivePath, { dir: romsDir });
 				} else if (asset.name.endsWith('.tar.gz') || asset.name.endsWith('.tgz')) {
 					const { execSync } = await import('child_process');
-					execSync(`tar xzf "${join(romsDir, asset.name)}" --strip-components=1 -C "${romsDir}"`);
+					execSync(`tar xzf "${archivePath}" --strip-components=1 -C "${romsDir}"`);
 				}
 
 				await updateJob(job.id, { status: 'completed', progress: 1, message: `ROMs extracted (${release.tag})`, result: release.tag });
@@ -208,6 +248,63 @@ export const actions: Actions = {
 			result.ok ? result.message : result.message
 		);
 		return result;
+	},
+
+	updateEmbeddedSunshine: async ({ request, locals }) => {
+		const embeddedHost = await getEmbeddedHostRow();
+		if (!embeddedHost) {
+			return fail(404, { error: 'Embedded host not found.' });
+		}
+		const data = await request.formData();
+		const apiPortRaw = data.get('apiPort')?.toString().trim() || '47990';
+		const upnp = data.get('upnp')?.toString().trim() || 'off';
+		const originAllowed = data.get('originWebUiAllowed')?.toString().trim() || 'lan';
+		const doRestart = data.get('restartAfterSave') === 'on';
+		const apiPort = Number(apiPortRaw);
+
+		if (!Number.isInteger(apiPort) || apiPort < 1024 || apiPort > 65535) {
+			return fail(400, { embeddedConfigError: 'API port must be an integer between 1024 and 65535.' });
+		}
+		if (!['on', 'off'].includes(upnp)) {
+			return fail(400, { embeddedConfigError: 'UPnP must be either on or off.' });
+		}
+		if (!['lan', 'pc', 'wan'].includes(originAllowed)) {
+			return fail(400, { embeddedConfigError: 'origin_web_ui_allowed must be one of lan, pc, wan.' });
+		}
+
+		const sunshineHost: SunshineHost = {
+			address: embeddedHost.address,
+			port: embeddedHost.port,
+			username: embeddedHost.username,
+			credentialEncrypted: embeddedHost.credentialEncrypted,
+			tlsVerify: embeddedHost.tlsVerify,
+			sunshineScheme: parseSunshineScheme(embeddedHost.sunshineScheme)
+		};
+
+		try {
+			await updateConfig(sunshineHost, {
+				port: String(apiPort),
+				upnp,
+				origin_web_ui_allowed: originAllowed
+			});
+			if (doRestart) {
+				await restartSunshine(sunshineHost);
+			}
+		} catch (err) {
+			return fail(502, {
+				embeddedConfigError:
+					err instanceof Error ? err.message : 'Failed to write Sunshine configuration.'
+			});
+		}
+
+		await logAudit(
+			locals.user?.id ?? null,
+			'update_embedded_sunshine',
+			'streaming_host',
+			embeddedHost.id,
+			`port=${apiPort}, upnp=${upnp}, origin_web_ui_allowed=${originAllowed}, restart=${doRestart}`
+		);
+		return { embeddedConfigSaved: true };
 	},
 
 	deleteJob: async ({ request }) => {

@@ -7,17 +7,13 @@ Sphere86 provides a web interface to create and manage 86Box machine configurati
 ## Architecture
 
 ```
-Browser  ──>  Sphere86 (SvelteKit, single Docker container)
+Browser  ──>  Sphere86 (SvelteKit, Docker)
                 │
-                ├── SQLite database (under `/data` in Docker)
-                ├── Writes configs and VM files under `SHARE_ROOT` (default `/data`)
-                └── Calls the Sunshine REST API on streaming hosts
-                       │
-                       ▼
-              Streaming host (VM or workstation)
-                ├── 86Box (started per Sunshine app)
-                ├── Sunshine (streams to Moonlight)
-                └── Shared config directory (NFS/SMB or local)
+                ├── SQLite database (under `/data`)
+                ├── Writes configs and VM files under `/data`
+                └── Sunshine REST API
+                     ├── External host mode (VM/workstation), or
+                     └── Embedded single-image mode (same container)
 ```
 
 ## Features
@@ -30,7 +26,8 @@ Browser  ──>  Sphere86 (SvelteKit, single Docker container)
 - **Authentication** — sessions with default password and forced change on first login
 - **Audit log** — who changed what and when
 - **WebSocket progress** — live status for long-running jobs
-- **Single container image** — one Node process; persistent data on a volume
+- **Single-image embedded host mode** — one privileged container can run Sphere86 + Sunshine + 86Box + virtual display
+- **Single container image** — persistent data on a volume
 - **Streaming host installer** — shell wizard for Debian / Ubuntu guests (`tools/scripts`)
 
 ## Quick start
@@ -54,6 +51,42 @@ The compose file maps `${SPHERE86_DATA_DIR}` to `/data` in the container. If `SP
 
 Open `http://localhost:3000` and sign in with **admin** / **sphere86** (change the password when prompted).
 
+### Docker single-image embedded host mode
+
+This repository now supports running the full stack in one container:
+
+- Sphere86 app
+- Sunshine
+- 86Box
+- Xvfb + lightweight X session (Openbox, software rendering)
+
+`docker-compose.yml` is preconfigured for this mode (`privileged: true` and Sunshine ports exposed).  
+The container bootstrap creates/updates an **embedded managed host** in Sphere86 automatically and points it to `127.0.0.1:47990`.
+
+Important:
+
+- This mode requires a **privileged container**.
+- Target platform is **x86_64 / amd64 Linux** (Sunshine + 86Box release assets used by bootstrap are amd64-focused).
+- Keep `SPHERE86_SECRET` stable (or stored host credentials become unreadable).
+- Default Sunshine login is `admin` / `sunshine` (override via env).
+
+Example `.env`:
+
+```env
+SPHERE86_DATA_DIR=/path/on/host/sphere86-data
+SPHERE86_SECRET=replace-with-a-long-random-secret-at-least-32-chars
+SUNSHINE_WEB_USERNAME=admin
+SUNSHINE_WEB_PASSWORD=change-this-password
+BOX_USER=sphere86
+```
+
+After startup:
+
+1. Open `http://localhost:3000`
+2. Go to **Hosts** and verify the **Embedded** host is online
+3. Go to **Settings** -> **Embedded Sunshine Host** to control core Sunshine options
+4. Create/publish a machine profile and connect via Moonlight
+
 ### Local development
 
 ```bash
@@ -67,10 +100,36 @@ npm run dev
 |----------|----------------|-------------|
 | `SPHERE86_SECRET` | 32+ random characters | Encrypts stored Sunshine and related credentials |
 | `DATABASE_URL` | `file:/data/config/sphere86.db` (Docker) or `file:./data/config/sphere86.db` (dev) | SQLite database file |
-| `SHARE_ROOT` | `/data` (Docker) or empty / local path | Root directory for generated configs, VMs, ROM cache |
+| `SPHERE86_DATA_ROOT` | `/data` | Local runtime root for configs, VMs, logs and cache |
+| `BOX86_CONFIG_BASE_PATH` | `/data` | Base path where `vms/<uuid>/86box.cfg` is written |
+| `BOX86_BINARY_PATH` | `/usr/local/bin/86Box` | 86Box binary used when publishing to Sunshine |
+| `BOX86_ROMS_PATH` | `/opt/86box/roms` | Standard ROM directory passed to 86Box (`-R`) |
 | `PORT` | `3000` | HTTP port |
 
-In Docker, `DATABASE_URL` and `SHARE_ROOT` are set in `docker-compose.yml` / the image so the database and file tree stay under the `/data` volume.
+In Docker, `DATABASE_URL` and `SPHERE86_DATA_ROOT` are set in `docker-compose.yml` / the image so the database and file tree stay under the `/data` volume.
+
+Additional embedded-mode variables:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SPHERE86_SINGLE_IMAGE_MODE` | `true` | Enables single-image behavior and embedded host registration |
+| `SPHERE86_EMBEDDED_HOST` | `true` | Enables managed local streaming host bootstrap |
+| `SPHERE86_EMBEDDED_HOST_NAME` | `Embedded Local Host` | Name shown in the Hosts page |
+| `SPHERE86_EMBEDDED_HOST_ADDRESS` | `127.0.0.1` | Local Sunshine API endpoint inside container |
+| `SPHERE86_EMBEDDED_HOST_PORT` | `47990` | Sunshine API / Web UI port |
+| `SPHERE86_EMBEDDED_SUNSHINE_SCHEME` | `http` | `http`, `https`, or `auto` |
+| `SUNSHINE_WEB_USERNAME` | `admin` | Initial Sunshine Web UI user |
+| `SUNSHINE_WEB_PASSWORD` | `sunshine` | Initial Sunshine Web UI password |
+| `SUNSHINE_INSTALL_METHOD` | `auto` | `auto` tries `.deb` first then AppImage fallback; `deb` or `appimage` force method |
+| `SUNSHINE_DEB_URL` | empty | Optional explicit Sunshine `.deb` URL |
+| `SUNSHINE_APPIMAGE_URL` | empty | Optional explicit Sunshine AppImage URL |
+| `GITHUB_TOKEN` / `GITHUB_API_TOKEN` | empty | Optional temporary GitHub token for higher API rate limits during bootstrap |
+| `BOX_USER` | `sphere86` | Linux user running Sunshine/86Box/X session |
+
+Embedded mode ports:
+
+- `47990/tcp` Sunshine API/runtime config (used by Sphere86 managed host integration)
+- `47991/tcp` Sunshine configuration Web UI (HTTPS)
 
 ## Streaming host setup
 
@@ -89,7 +148,7 @@ chmod +x tools/scripts/sphere86-install-wizard.sh
 sudo ./tools/scripts/sphere86-install-wizard.sh
 ```
 
-The wizard supports a full install, 86Box-only, Sunshine-only, share-only, and static IP options, with post-steps tests and a **Passed / Failed** summary. It does **not** download ROM sets; provide ROMs through the Sphere86 UI or your share.
+The wizard supports a full install, 86Box-only, Sunshine-only, and static IP options, with post-steps tests and a **Passed / Failed** summary. It does **not** download ROM sets; provide ROMs through the Sphere86 UI.
 
 ### What the wizard installs (full run)
 
@@ -100,7 +159,7 @@ The wizard supports a full install, 86Box-only, Sunshine-only, share-only, and s
 5. Optional static IP via Netplan  
 6. Latest 86Box Linux build from GitHub (ROM content is separate; ROM directory is linked under your config path)  
 7. Sunshine from LizardByte packages — `sphere86-sunshine.service` waits for the X11 socket, sets `DISPLAY` (default `:0`; set during install if your session uses e.g. `:2.0`), `XAUTHORITY`, and `XDG_RUNTIME_DIR` so streaming and launched apps see the same desktop  
-8. Optional NFS or SMB mount for shared configs  
+8. Local config/runtime path only (no NFS/SMB required in single-image mode)  
 9. Optional UFW rules for Sunshine / Moonlight ports  
 
 ### Moonlight / 86Box notes
@@ -114,7 +173,7 @@ The wizard supports a full install, 86Box-only, Sunshine-only, share-only, and s
 
 1. Install 86Box and Sunshine for your OS  
 2. Mount or sync the same config directory you use from Sphere86  
-3. Run `npm run dev` and set `SHARE_ROOT` to that directory  
+3. Run `npm run dev` and set `SPHERE86_DATA_ROOT` to that directory
 
 ## Unraid
 

@@ -10,9 +10,9 @@ import {
 } from 'fs';
 import { basename, join } from 'path';
 import archiver from 'archiver';
-import { env } from '$env/dynamic/private';
+import { SPHERE86_DATA_ROOT } from '$lib/server/runtime-paths.js';
 
-const dataRoot = env.SHARE_ROOT || './data';
+const dataRoot = SPHERE86_DATA_ROOT;
 const logsDir = join(dataRoot, 'logs');
 const archiveDir = join(logsDir, 'archive');
 
