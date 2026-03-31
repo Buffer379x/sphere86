@@ -238,39 +238,38 @@ main() {
 	log "Starting Sunshine..."
 	run_as_user_bg "export DISPLAY='${DISPLAY_VAL}'; export XDG_RUNTIME_DIR='${XDG_RUNTIME_DIR}'; export PULSE_SERVER='${PULSE_SERVER}'; export XAUTHORITY='/home/${BOX_USER}/.Xauthority'; sunshine"
 
-	# Sunshine creates virtual input devices (mouse, keyboard, gamepads) via uinput.
-	# Wait for them, then trigger udev again so Xorg picks them up via libinput hotplug.
+	# Sunshine creates virtual input devices (mouse, keyboard, gamepads) via uinput
+	# ON DEMAND — only when a Moonlight client connects, not at startup.
+	# Start a background watcher that detects new /dev/input/event* nodes and
+	# triggers udev so Xorg picks them up via libinput hotplug.
 	if should_use_xorg; then
-		sleep 4
-		log "Post-Sunshine udev trigger for virtual input devices..."
-		trigger_udev_input
-		local post_devs
-		post_devs="$(ls /dev/input/event* 2>/dev/null | wc -l)"
-		log "Post-Sunshine input event devices: ${post_devs}"
+		log "Starting background input device watcher..."
+		(
+			prev_count="$(ls /dev/input/event* 2>/dev/null | wc -l)"
+			log "Input watcher: baseline ${prev_count} event devices."
+			while true; do
+				sleep 2
+				cur_count="$(ls /dev/input/event* 2>/dev/null | wc -l)"
+				if [ "${cur_count}" -gt "${prev_count}" ]; then
+					new_devs=$((cur_count - prev_count))
+					log "Input watcher: ${new_devs} new device(s) detected (${prev_count} -> ${cur_count}). Triggering udev..."
+					chmod 666 /dev/input/event* 2>/dev/null || true
+					chmod 666 /dev/input/mice 2>/dev/null || true
+					udevadm trigger --subsystem-match=input --action=add 2>/dev/null || true
+					udevadm trigger --subsystem-match=input --action=change 2>/dev/null || true
+					udevadm settle --timeout=5 2>/dev/null || true
+					prev_count="${cur_count}"
 
-		if command -v xinput >/dev/null 2>&1; then
-			log "Xorg input devices (xinput list):"
-			DISPLAY="${DISPLAY_VAL}" xinput list 2>/dev/null | while IFS= read -r line; do
-				log "  ${line}"
-			done || true
-		fi
-
-		# Verify that Xorg actually picked up slave input devices.
-		local slave_count=0
-		if command -v xinput >/dev/null 2>&1; then
-			slave_count="$(DISPLAY="${DISPLAY_VAL}" xinput list 2>/dev/null | grep -c 'slave' || true)"
-		fi
-		if (( slave_count == 0 )); then
-			log "WARNING: Xorg has no slave input devices. Checking udev database..."
-			for d in /sys/class/input/event*; do
-				[[ -e "${d}" ]] || continue
-				local devname
-				devname="$(basename "${d}")"
-				local id_input
-				id_input="$(udevadm info --query=property "${d}" 2>/dev/null | grep '^ID_INPUT=' || echo 'MISSING')"
-				log "  /dev/input/${devname}: ${id_input}"
+					if command -v xinput >/dev/null 2>&1; then
+						log "Input watcher: Xorg devices after trigger:"
+						DISPLAY="${DISPLAY_VAL}" xinput list 2>/dev/null | while IFS= read -r line; do
+							log "  ${line}"
+						done || true
+					fi
+				fi
 			done
-		fi
+		) &
+		pids+=("$!")
 	fi
 
 	log "Starting Sphere86 app..."

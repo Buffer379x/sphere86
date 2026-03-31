@@ -65,41 +65,54 @@ curl_github_json() {
 	curl "${args[@]}" "${url}"
 }
 
-install_sunshine_deb() {
-	local api json url deb arch distro asset_name releases_json
-	arch="$(dpkg --print-architecture)"
-	distro="${DISTRO_CODENAME:-}"
-	if [[ -z "${distro}" && -f /etc/os-release ]]; then
+find_deb_url_in_release() {
+	# $1 = release JSON, $2 = arch
+	# Try asset names in priority order for compatibility with our base image (Debian bookworm).
+	local json="$1" arch="$2"
+	local distro=""
+	if [[ -f /etc/os-release ]]; then
 		# shellcheck disable=SC1091
 		source /etc/os-release
 		distro="${VERSION_CODENAME:-}"
 	fi
-	asset_name="sunshine-debian-${distro}-${arch}.deb"
-	log "Looking for asset: ${asset_name}"
+	local -a candidates=(
+		"sunshine-debian-${distro}-${arch}.deb"
+		"sunshine-ubuntu-24.04-${arch}.deb"
+		"sunshine-ubuntu-22.04-${arch}.deb"
+		"sunshine-debian-trixie-${arch}.deb"
+	)
+	for name in "${candidates[@]}"; do
+		[[ -z "${name}" || "${name}" == *"--"* ]] && continue
+		local found
+		found="$(echo "${json}" | jq -r --arg n "${name}" '.assets[] | select(.name == $n) | .browser_download_url' 2>/dev/null | head -1)"
+		if [[ -n "${found}" && "${found}" != "null" ]]; then
+			log "Matched asset: ${name}"
+			echo "${found}"
+			return 0
+		fi
+	done
+	return 1
+}
+
+install_sunshine_deb() {
+	local api json url deb arch
+	arch="$(dpkg --print-architecture)"
 	api="https://api.github.com/repos/LizardByte/Sunshine/releases/latest"
+	log "Fetching latest release info from GitHub..."
 	json="$(curl_github_json "$api" 2>&1)" || {
 		log "ERROR: GitHub API request failed: ${json}"
 		return 1
 	}
-	url=""
-	if [[ -n "${distro}" && -n "${json}" ]]; then
-		url="$(echo "$json" | jq -r --arg n "${asset_name}" '.assets[] | select(.name == $n) | .browser_download_url' | head -1)"
-	fi
+
+	local tag
+	tag="$(echo "${json}" | jq -r '.tag_name // empty' 2>/dev/null || true)"
+	log "Latest release: ${tag:-unknown}"
+	log "Available .deb assets:"
+	echo "${json}" | jq -r '.assets[].name' 2>/dev/null | grep -i '\.deb$' | while IFS= read -r a; do log "  ${a}"; done || true
+
+	url="$(find_deb_url_in_release "${json}" "${arch}")" || true
 	if [[ -z "${url}" || "${url}" == "null" ]]; then
-		releases_json="$(curl_github_json "https://api.github.com/repos/LizardByte/Sunshine/releases?per_page=100" 2>/dev/null || true)"
-		if [[ -n "${releases_json}" ]]; then
-			url="$(echo "$releases_json" | jq -r --arg n "${asset_name}" '
-				.[]
-				| .assets[]?
-				| select(.name == $n)
-				| .browser_download_url
-			' | head -1)"
-		fi
-	fi
-	if [[ -z "${url}" || "${url}" == "null" ]]; then
-		log "No compatible Sunshine .deb found for distro='${distro:-unknown}' arch='${arch}'."
-		log "Available assets:"
-		echo "$json" | jq -r '.assets[].name' 2>/dev/null | head -20 | while IFS= read -r a; do log "  ${a}"; done || true
+		log "No compatible .deb in latest release for arch='${arch}'."
 		return 1
 	fi
 	log "Downloading: ${url}"

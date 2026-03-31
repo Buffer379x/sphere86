@@ -128,6 +128,35 @@ EOF
 	write_cached_url "${SUNSHINE_APPIMAGE_URL_CACHE}" "${url}"
 }
 
+find_deb_url_in_release() {
+	# $1 = release JSON, $2 = arch
+	# Try asset names in priority order for compatibility with our base image.
+	local json="$1" arch="$2"
+	local distro=""
+	if [[ -f /etc/os-release ]]; then
+		# shellcheck disable=SC1091
+		source /etc/os-release
+		distro="${VERSION_CODENAME:-}"
+	fi
+	local -a candidates=(
+		"sunshine-debian-${distro}-${arch}.deb"
+		"sunshine-ubuntu-24.04-${arch}.deb"
+		"sunshine-ubuntu-22.04-${arch}.deb"
+		"sunshine-debian-trixie-${arch}.deb"
+	)
+	for name in "${candidates[@]}"; do
+		[[ -z "${name}" || "${name}" == *"--"* ]] && continue
+		local found
+		found="$(echo "${json}" | jq -r --arg n "${name}" '.assets[] | select(.name == $n) | .browser_download_url' 2>/dev/null | head -1)"
+		if [[ -n "${found}" && "${found}" != "null" ]]; then
+			log "Matched asset: ${name}"
+			echo "${found}"
+			return 0
+		fi
+	done
+	return 1
+}
+
 install_sunshine_deb() {
 	if command -v sunshine >/dev/null 2>&1; then
 		log "Sunshine already present."
@@ -135,52 +164,27 @@ install_sunshine_deb() {
 	fi
 
 	log "Installing Sunshine from release .deb..."
-	local api json url deb arch distro asset_name releases_json
+	local api json url deb arch
 	arch="$(dpkg --print-architecture)"
-	distro="${DISTRO_CODENAME:-}"
-	if [[ -z "${distro}" && -f /etc/os-release ]]; then
-		# shellcheck disable=SC1091
-		source /etc/os-release
-		distro="${VERSION_CODENAME:-}"
-	fi
-	asset_name="sunshine-debian-${distro}-${arch}.deb"
-	api="https://api.github.com/repos/LizardByte/Sunshine/releases/latest"
-	json="$(curl_github_json "$api" 2>/dev/null || true)"
 	url="${SUNSHINE_DEB_URL:-}"
+
 	if [[ -z "${url}" ]]; then
-		if [[ -n "${distro}" && -n "${json}" ]]; then
-			# Prefer exact distro+arch naming for deterministic ABI compatibility.
-			url="$(echo "$json" | jq -r --arg n "${asset_name}" '.assets[] | select(.name == $n) | .browser_download_url' | head -1)"
+		api="https://api.github.com/repos/LizardByte/Sunshine/releases/latest"
+		json="$(curl_github_json "$api" 2>/dev/null || true)"
+		if [[ -n "${json}" ]]; then
+			url="$(find_deb_url_in_release "${json}" "${arch}")" || true
 		fi
 	fi
-	if [[ -z "${url}" || "${url}" == "null" ]]; then
-		# If latest no longer ships this distro asset (e.g. only trixie/ubuntu),
-		# pick newest release that still has exact distro+arch package.
-		releases_json="$(curl_github_json "https://api.github.com/repos/LizardByte/Sunshine/releases?per_page=100" 2>/dev/null || true)"
-		if [[ -n "${releases_json}" ]]; then
-			url="$(echo "$releases_json" | jq -r --arg n "${asset_name}" '
-				.[]
-				| .assets[]?
-				| select(.name == $n)
-				| .browser_download_url
-			' | head -1)"
-		fi
-	fi
+
 	if [[ -z "${url}" || "${url}" == "null" ]]; then
 		url="$(read_cached_url "${SUNSHINE_DEB_URL_CACHE}" 2>/dev/null || true)"
 		if [[ -n "${url}" ]]; then
 			log "Using cached Sunshine .deb URL."
 		fi
 	fi
+
 	if [[ -z "${url}" || "${url}" == "null" ]]; then
-		# Deterministic fallback for bookworm/arm64 when GitHub API is rate-limited.
-		if [[ "${distro}" == "bookworm" && "${arch}" == "arm64" ]]; then
-			url="https://github.com/LizardByte/Sunshine/releases/download/v2025.628.4510/sunshine-debian-bookworm-arm64.deb"
-			log "Using deterministic fallback Sunshine .deb URL for bookworm/arm64."
-		fi
-	fi
-	if [[ -z "${url}" || "${url}" == "null" ]]; then
-		log "No compatible Sunshine .deb asset found for distro='${distro:-unknown}' arch='${arch}'. Set SUNSHINE_DEB_URL explicitly."
+		log "No compatible Sunshine .deb asset found for arch='${arch}'. Set SUNSHINE_DEB_URL explicitly."
 		return 1
 	fi
 	log "Using Sunshine .deb: ${url}"
