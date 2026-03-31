@@ -26,6 +26,62 @@ run_as_user_bg() {
 	pids+=("$!")
 }
 
+check_input_device_access() {
+	local dev="$1"
+	python3 - "$dev" "$BOX_USER" <<'PY'
+import os
+import pwd
+import stat
+import sys
+
+dev = sys.argv[1]
+user = sys.argv[2]
+
+if not os.path.exists(dev):
+    print(f"[entrypoint] Input device missing: {dev}")
+    sys.exit(0)
+
+st = os.stat(dev)
+mode = stat.S_IMODE(st.st_mode)
+owner = st.st_uid
+group = st.st_gid
+print(f"[entrypoint] Input device present: {dev} mode={oct(mode)} uid={owner} gid={group}")
+
+try:
+    pw = pwd.getpwnam(user)
+except KeyError:
+    print(f"[entrypoint] User not found for input probe: {user}")
+    sys.exit(0)
+
+uid = pw.pw_uid
+gids = os.getgrouplist(user, pw.pw_gid)
+
+allowed = False
+if uid == owner and mode & 0o600:
+    allowed = True
+elif group in gids and mode & 0o060:
+    allowed = True
+elif mode & 0o006:
+    allowed = True
+
+if not allowed:
+    print(f"[entrypoint] WARNING: {user} likely cannot access {dev} (permission bits).")
+PY
+
+	# Real open test as BOX_USER catches cgroup/device policy denials.
+	if runuser -u "$BOX_USER" -- python3 - "$dev" <<'PY'
+import os, sys
+dev = sys.argv[1]
+fd = os.open(dev, os.O_RDWR | os.O_NONBLOCK)
+os.close(fd)
+PY
+	then
+		log "Input probe success: ${BOX_USER} can open ${dev}"
+	else
+		log "WARNING: ${BOX_USER} cannot open ${dev}. Mouse/keyboard passthrough will not work."
+	fi
+}
+
 main() {
 	/app/scripts/container/bootstrap-streaming-host.sh
 
@@ -36,6 +92,8 @@ main() {
 	[[ -e /dev/uhid ]] || mknod /dev/uhid c 10 239 2>/dev/null || true
 	chmod 666 /dev/uinput 2>/dev/null || true
 	chmod 666 /dev/uhid 2>/dev/null || true
+	check_input_device_access /dev/uinput
+	check_input_device_access /dev/uhid
 
 	# X/ICE socket dirs must exist with sticky bit before user-space X session starts.
 	mkdir -p /tmp/.X11-unix /tmp/.ICE-unix
