@@ -217,6 +217,24 @@ main() {
 	log "Starting Sunshine..."
 	run_as_user_bg "export DISPLAY='${DISPLAY_VAL}'; export XDG_RUNTIME_DIR='${XDG_RUNTIME_DIR}'; export PULSE_SERVER='${PULSE_SERVER}'; export XAUTHORITY='/home/${BOX_USER}/.Xauthority'; sunshine"
 
+	# Sunshine creates virtual input devices (mouse, keyboard, gamepads) via uinput at startup.
+	# Wait for them to appear, then trigger udev so Xorg picks them up via libinput hotplug.
+	if should_use_xorg; then
+		sleep 3
+		chmod 666 /dev/input/event* 2>/dev/null || true
+		udevadm trigger --action=add 2>/dev/null || true
+		udevadm settle --timeout=5 2>/dev/null || true
+		local new_input_devs
+		new_input_devs="$(ls /dev/input/event* 2>/dev/null | wc -l)"
+		log "Post-Sunshine udev trigger complete. Input event devices: ${new_input_devs}"
+		# Log what Xorg sees (if xinput is available)
+		if command -v xinput >/dev/null 2>&1; then
+			local xinput_list
+			xinput_list="$(DISPLAY="${DISPLAY_VAL}" xinput list --short 2>/dev/null || true)"
+			log "Xorg input devices: ${xinput_list}"
+		fi
+	fi
+
 	log "Starting Sphere86 app..."
 	exec node /app/build
 }

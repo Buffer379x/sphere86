@@ -19,7 +19,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     avahi-daemon avahi-utils libnss-mdns \
     libgl1-mesa-dri mesa-utils pulseaudio \
     tini procps kmod udev libcap2-bin \
-    libxtst6 xdotool \
+    libxtst6 xdotool xinput \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
