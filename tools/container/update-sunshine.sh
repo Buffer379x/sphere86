@@ -8,16 +8,37 @@ BOX_HOME="/home/${BOX_USER}"
 SUNSHINE_CONFIG_BASE="${SUNSHINE_CONFIG_BASE_PATH:-/data/sunshine}"
 GITHUB_API_TOKEN="${GITHUB_API_TOKEN:-${GITHUB_TOKEN:-}}"
 
-old_version=""
-if command -v sunshine >/dev/null 2>&1; then
-	old_version="$(sunshine --version 2>&1 | head -1 || true)"
-fi
+get_sunshine_version() {
+	local log_file="/data/sunshine/config/sunshine.log"
+	if [[ -f "${log_file}" ]]; then
+		local from_log
+		from_log="$(grep 'Sunshine version:' "${log_file}" | tail -1 | sed 's/.*Sunshine version:[[:space:]]*//' | grep -oE 'v[0-9]+\.[0-9]+[0-9.]*' | head -1 || true)"
+		if [[ -n "${from_log}" ]]; then
+			echo "${from_log}"
+			return
+		fi
+	fi
+	local from_dpkg
+	from_dpkg="$(dpkg-query -W -f='${Version}' sunshine 2>/dev/null || true)"
+	if [[ -n "${from_dpkg}" && "${from_dpkg}" != *"no packages"* ]]; then
+		echo "${from_dpkg}"
+		return
+	fi
+	sunshine --version 2>&1 | head -1 || true
+}
+
+old_version="$(get_sunshine_version)"
 log "Current version: ${old_version:-unknown}"
 
 log "Stopping Sunshine process..."
-pkill -f sunshine 2>/dev/null || true
+# Use -x to match exact process name only; -f would also kill this script
+# since "sunshine" appears in its path (update-sunshine.sh).
+pkill -x sunshine 2>/dev/null || true
 sleep 2
-pkill -9 -f sunshine 2>/dev/null || true
+pkill -9 -x sunshine 2>/dev/null || true
+# Also kill any AppRun wrapper that might be the actual sunshine process
+pkill -f '/opt/sunshine/appdir/AppRun' 2>/dev/null || true
+sleep 1
 
 log "Removing existing Sunshine installation..."
 rm -f /usr/local/bin/sunshine
@@ -25,7 +46,7 @@ rm -rf /opt/sunshine/appdir /opt/sunshine/squashfs-root
 dpkg --purge sunshine 2>/dev/null || true
 apt-get -y autoremove 2>/dev/null || true
 
-log "Installing latest Sunshine..."
+log "Installing latest Sunshine (fetching from GitHub)..."
 
 curl_github_json() {
 	local url="$1"
@@ -54,8 +75,12 @@ install_sunshine_deb() {
 		distro="${VERSION_CODENAME:-}"
 	fi
 	asset_name="sunshine-debian-${distro}-${arch}.deb"
+	log "Looking for asset: ${asset_name}"
 	api="https://api.github.com/repos/LizardByte/Sunshine/releases/latest"
-	json="$(curl_github_json "$api" 2>/dev/null || true)"
+	json="$(curl_github_json "$api" 2>&1)" || {
+		log "ERROR: GitHub API request failed: ${json}"
+		return 1
+	}
 	url=""
 	if [[ -n "${distro}" && -n "${json}" ]]; then
 		url="$(echo "$json" | jq -r --arg n "${asset_name}" '.assets[] | select(.name == $n) | .browser_download_url' | head -1)"
@@ -73,13 +98,23 @@ install_sunshine_deb() {
 	fi
 	if [[ -z "${url}" || "${url}" == "null" ]]; then
 		log "No compatible Sunshine .deb found for distro='${distro:-unknown}' arch='${arch}'."
+		log "Available assets:"
+		echo "$json" | jq -r '.assets[].name' 2>/dev/null | head -20 | while IFS= read -r a; do log "  ${a}"; done || true
 		return 1
 	fi
 	log "Downloading: ${url}"
 	deb="/tmp/sunshine-update.deb"
-	curl -fsSL "$url" -o "$deb"
-	apt-get update -qq
-	apt-get install -y -qq "$deb" 2>/dev/null || { dpkg -i "$deb" || true; apt-get install -f -y -qq; }
+	if ! curl -fsSL "$url" -o "$deb"; then
+		log "ERROR: Download failed for ${url}"
+		return 1
+	fi
+	log "Installing .deb package..."
+	apt-get update -qq 2>&1 || true
+	if ! apt-get install -y "$deb" 2>&1; then
+		log "apt-get install failed, trying dpkg -i..."
+		dpkg -i "$deb" 2>&1 || true
+		apt-get install -f -y 2>&1 || true
+	fi
 	rm -f "$deb"
 }
 
@@ -137,9 +172,6 @@ if ! command -v sunshine >/dev/null 2>&1; then
 	exit 1
 fi
 
-new_version="$(sunshine --version 2>&1 | head -1 || true)"
-log "Installed version: ${new_version:-unknown}"
-
 log "Ensuring config symlink..."
 rm -rf "${BOX_HOME}/.config/sunshine"
 ln -sfn "${SUNSHINE_CONFIG_BASE}/config" "${BOX_HOME}/.config/sunshine"
@@ -164,6 +196,8 @@ runuser -u "$BOX_USER" -- /bin/bash -lc "\
 	export XDG_RUNTIME_DIR='${XDG_RUNTIME_DIR}'; \
 	export PULSE_SERVER='${PULSE_SERVER}'; \
 	export XAUTHORITY='/home/${BOX_USER}/.Xauthority'; \
-	sunshine &" 2>/dev/null
+	sunshine &" 2>&1 || log "WARNING: Failed to start Sunshine after update."
 
+sleep 3
+new_version="$(get_sunshine_version)"
 log "Update complete: ${old_version:-unknown} -> ${new_version:-unknown}"

@@ -103,41 +103,52 @@ should_use_xorg() {
 	return 1
 }
 
+start_udevd() {
+	if [[ -f /app/scripts/container/99-input-permissions.rules ]]; then
+		mkdir -p /etc/udev/rules.d
+		cp -f /app/scripts/container/99-input-permissions.rules /etc/udev/rules.d/
+	fi
+
+	local udevd_bin=""
+	for candidate in /usr/lib/systemd/systemd-udevd /lib/systemd/systemd-udevd /sbin/udevd /usr/sbin/udevd; do
+		if [[ -x "${candidate}" ]]; then
+			udevd_bin="${candidate}"
+			break
+		fi
+	done
+	command -v udevd >/dev/null 2>&1 && udevd_bin="$(command -v udevd)"
+
+	if [[ -n "${udevd_bin}" ]]; then
+		"${udevd_bin}" --daemon 2>/dev/null || "${udevd_bin}" -d 2>/dev/null || true
+		sleep 0.5
+		udevadm control --reload-rules 2>/dev/null || true
+		udevadm trigger --subsystem-match=input --action=add 2>/dev/null || true
+		udevadm settle --timeout=5 2>/dev/null || true
+		log "udevd started (${udevd_bin}) for input hotplug."
+	else
+		log "WARNING: udevd not found. Input device hotplug will not work."
+	fi
+}
+
+trigger_udev_input() {
+	chmod 666 /dev/input/event* 2>/dev/null || true
+	chmod 666 /dev/input/mice 2>/dev/null || true
+	udevadm control --reload-rules 2>/dev/null || true
+	udevadm trigger --subsystem-match=input --action=add 2>/dev/null || true
+	udevadm trigger --subsystem-match=input --action=change 2>/dev/null || true
+	udevadm settle --timeout=5 2>/dev/null || true
+}
+
 start_display_server() {
 	if should_use_xorg; then
 		log "Starting Xorg with dummy driver on ${DISPLAY_VAL}..."
 
-		# Xorg needs a VT; create a minimal /dev/tty0 if missing.
 		[[ -e /dev/tty0 ]] || mknod /dev/tty0 c 4 0 2>/dev/null || true
 		chmod 666 /dev/tty0 2>/dev/null || true
 		[[ -e /dev/tty7 ]] || mknod /dev/tty7 c 4 7 2>/dev/null || true
 		chmod 666 /dev/tty7 2>/dev/null || true
 
-		# udevd is needed so Xorg can hotplug input devices created by Sunshine (via uinput).
-		# Install udev rule for input device permissions if not already present.
-		if [[ -f /app/scripts/container/99-input-permissions.rules ]]; then
-			mkdir -p /etc/udev/rules.d
-			cp -f /app/scripts/container/99-input-permissions.rules /etc/udev/rules.d/
-		fi
-
-		local udevd_bin=""
-		for candidate in /usr/lib/systemd/systemd-udevd /lib/systemd/systemd-udevd /sbin/udevd /usr/sbin/udevd; do
-			if [[ -x "${candidate}" ]]; then
-				udevd_bin="${candidate}"
-				break
-			fi
-		done
-		command -v udevd >/dev/null 2>&1 && udevd_bin="$(command -v udevd)"
-
-		if [[ -n "${udevd_bin}" ]]; then
-			"${udevd_bin}" --daemon 2>/dev/null || "${udevd_bin}" -d 2>/dev/null || true
-			sleep 0.5
-			udevadm trigger --action=add 2>/dev/null || true
-			udevadm settle --timeout=5 2>/dev/null || true
-			log "udevd started (${udevd_bin}) for input hotplug."
-		else
-			log "WARNING: udevd not found. Input device hotplug will not work."
-		fi
+		start_udevd
 
 		run_bg Xorg "${DISPLAY_VAL}" vt7 \
 			-noreset +extension GLX +extension RANDR +extension RENDER \
@@ -210,6 +221,16 @@ main() {
 		log "X server ready (${x_sock} appeared after ~${waited}s)."
 	fi
 
+	# Xorg's udev monitor is now active. Re-trigger so it discovers pre-existing
+	# /dev/input devices that were created before the X server started.
+	if should_use_xorg; then
+		log "Post-Xorg udev trigger for pre-existing input devices..."
+		trigger_udev_input
+		local pre_devs
+		pre_devs="$(ls /dev/input/event* 2>/dev/null | wc -l)"
+		log "Pre-existing input event devices: ${pre_devs}"
+	fi
+
 	log "Starting lightweight X session..."
 	run_as_user_bg "export DISPLAY='${DISPLAY_VAL}'; export XDG_RUNTIME_DIR='${XDG_RUNTIME_DIR}'; export PULSE_SERVER='${PULSE_SERVER}'; dbus-launch --exit-with-session openbox"
 
@@ -217,21 +238,38 @@ main() {
 	log "Starting Sunshine..."
 	run_as_user_bg "export DISPLAY='${DISPLAY_VAL}'; export XDG_RUNTIME_DIR='${XDG_RUNTIME_DIR}'; export PULSE_SERVER='${PULSE_SERVER}'; export XAUTHORITY='/home/${BOX_USER}/.Xauthority'; sunshine"
 
-	# Sunshine creates virtual input devices (mouse, keyboard, gamepads) via uinput at startup.
-	# Wait for them to appear, then trigger udev so Xorg picks them up via libinput hotplug.
+	# Sunshine creates virtual input devices (mouse, keyboard, gamepads) via uinput.
+	# Wait for them, then trigger udev again so Xorg picks them up via libinput hotplug.
 	if should_use_xorg; then
-		sleep 3
-		chmod 666 /dev/input/event* 2>/dev/null || true
-		udevadm trigger --action=add 2>/dev/null || true
-		udevadm settle --timeout=5 2>/dev/null || true
-		local new_input_devs
-		new_input_devs="$(ls /dev/input/event* 2>/dev/null | wc -l)"
-		log "Post-Sunshine udev trigger complete. Input event devices: ${new_input_devs}"
-		# Log what Xorg sees (if xinput is available)
+		sleep 4
+		log "Post-Sunshine udev trigger for virtual input devices..."
+		trigger_udev_input
+		local post_devs
+		post_devs="$(ls /dev/input/event* 2>/dev/null | wc -l)"
+		log "Post-Sunshine input event devices: ${post_devs}"
+
 		if command -v xinput >/dev/null 2>&1; then
-			local xinput_list
-			xinput_list="$(DISPLAY="${DISPLAY_VAL}" xinput list --short 2>/dev/null || true)"
-			log "Xorg input devices: ${xinput_list}"
+			log "Xorg input devices (xinput list):"
+			DISPLAY="${DISPLAY_VAL}" xinput list 2>/dev/null | while IFS= read -r line; do
+				log "  ${line}"
+			done || true
+		fi
+
+		# Verify that Xorg actually picked up slave input devices.
+		local slave_count=0
+		if command -v xinput >/dev/null 2>&1; then
+			slave_count="$(DISPLAY="${DISPLAY_VAL}" xinput list 2>/dev/null | grep -c 'slave' || true)"
+		fi
+		if (( slave_count == 0 )); then
+			log "WARNING: Xorg has no slave input devices. Checking udev database..."
+			for d in /sys/class/input/event*; do
+				[[ -e "${d}" ]] || continue
+				local devname
+				devname="$(basename "${d}")"
+				local id_input
+				id_input="$(udevadm info --query=property "${d}" 2>/dev/null | grep '^ID_INPUT=' || echo 'MISSING')"
+				log "  /dev/input/${devname}: ${id_input}"
+			done
 		fi
 	fi
 

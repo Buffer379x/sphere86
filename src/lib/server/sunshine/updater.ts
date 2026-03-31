@@ -1,5 +1,5 @@
 import { execSync, execFile } from 'child_process';
-import { existsSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 
 const GITHUB_SUNSHINE_RELEASES = 'https://api.github.com/repos/LizardByte/Sunshine/releases';
 const GITHUB_HEADERS = {
@@ -37,6 +37,36 @@ export async function getLatestSunshineRelease(): Promise<SunshineReleaseInfo> {
 }
 
 export function getInstalledSunshineVersion(): string | null {
+	// 1. Parse from the Sunshine log file (most reliable: "Sunshine version: v2025.628.4510")
+	try {
+		const logPaths = [
+			'/data/sunshine/config/sunshine.log',
+			`/home/${process.env.BOX_USER ?? 'sphere86'}/.config/sunshine/sunshine.log`
+		];
+		for (const logPath of logPaths) {
+			if (!existsSync(logPath)) continue;
+			const content = readFileSync(logPath, 'utf-8');
+			const lines = content.split('\n');
+			for (let i = lines.length - 1; i >= 0; i--) {
+				const m = lines[i].match(/Sunshine version:\s*(v[\d.]+[\w.-]*)/i);
+				if (m) return m[1];
+			}
+		}
+	} catch { /* continue */ }
+
+	// 2. Try dpkg-query for .deb installations
+	try {
+		const dpkg = execSync('dpkg-query -W -f="${Version}" sunshine 2>/dev/null || true', {
+			encoding: 'utf-8',
+			timeout: 3_000
+		}).trim();
+		if (dpkg && !dpkg.includes('no packages')) {
+			const m = dpkg.match(/v?[\d]+\.[\d]+[\w.-]*/);
+			if (m) return m[0].startsWith('v') ? m[0] : `v${m[0]}`;
+		}
+	} catch { /* continue */ }
+
+	// 3. Fallback: sunshine --version (may report library version, not release tag)
 	try {
 		const out = execSync('sunshine --version 2>&1 || true', {
 			encoding: 'utf-8',
