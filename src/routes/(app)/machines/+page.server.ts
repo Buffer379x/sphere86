@@ -182,7 +182,10 @@ export const actions: Actions = {
 		const configAbsPath = join(BOX86_CONFIG_BASE_PATH, profile.deployPath);
 		const romAbsPath = BOX86_ROMS_PATH;
 		const startFs = host.box86StartFullscreen !== false;
-		const cmd = build86BoxCommand(BOX86_BINARY_PATH, configAbsPath, romAbsPath, host.x11Display, startFs);
+		const cmd =
+			host.managed && host.managedKind === 'embedded'
+				? `"/app/scripts/container/run-86box.sh" "${BOX86_BINARY_PATH}" "${configAbsPath}" "${romAbsPath}" "${host.x11Display}" "${startFs ? '1' : '0'}"`
+				: build86BoxCommand(BOX86_BINARY_PATH, configAbsPath, romAbsPath, host.x11Display, startFs);
 		const appName = `86Box: ${profile.name}`;
 		const workingDir = dirname(configAbsPath);
 

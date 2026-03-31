@@ -224,5 +224,5 @@ export function build86BoxCommand(
 	const display = normalizeX11Display(x11Display);
 	const logPath = join(dirname(configAbsolutePath), 'logs', '86box-sphere86.log');
 	const fsFlag = startFullscreen ? ' -F' : '';
-	return `env DISPLAY=${display} QT_QPA_PLATFORM=xcb XAUTHORITY="\${XAUTHORITY:-$HOME/.Xauthority}" "${binaryPath}" -R "${romAbsolutePath}" -C "${configAbsolutePath}" -L "${logPath}"${fsFlag}`;
+	return `env DISPLAY=${display} QT_QPA_PLATFORM=xcb "${binaryPath}" -R "${romAbsolutePath}" -C "${configAbsolutePath}" -L "${logPath}"${fsFlag}`;
 }

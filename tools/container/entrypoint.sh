@@ -28,6 +28,11 @@ run_as_user_bg() {
 main() {
 	/app/scripts/container/bootstrap-streaming-host.sh
 
+	# Best-effort input device permissions for Sunshine virtual input.
+	# On some hosts (e.g. containerized kernels), /dev/uinput exists but is not writable for BOX_USER.
+	chmod 666 /dev/uinput 2>/dev/null || true
+	chmod 666 /dev/uhid 2>/dev/null || true
+
 	# X/ICE socket dirs must exist with sticky bit before user-space X session starts.
 	mkdir -p /tmp/.X11-unix /tmp/.ICE-unix
 	chmod 1777 /tmp/.X11-unix /tmp/.ICE-unix
