@@ -153,7 +153,7 @@
 			<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
 				<div class="space-y-1">
 					<p class="text-xs uppercase tracking-wider" style="color: var(--theme-on-surface-variant);">App Version</p>
-					<p class="text-sm font-mono" style="color: var(--theme-primary);">{data.settings.app_version || '2.0.0'}</p>
+					<p class="text-sm font-mono" style="color: var(--theme-primary);">{data.appVersion || '2.0.0'}</p>
 				</div>
 				<div class="space-y-1">
 					<p class="text-xs uppercase tracking-wider" style="color: var(--theme-on-surface-variant);">Data Root</p>

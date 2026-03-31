@@ -305,6 +305,13 @@ prepare_data_layout() {
 	mkdir -p "${APP_DATA_ROOT}/config" "${APP_DATA_ROOT}/logs" "${APP_DATA_ROOT}/cache"
 	mkdir -p "${SUNSHINE_CONFIG_BASE}/config"
 	mkdir -p "${CONFIG_BASE}" "${CONFIG_BASE}/vms" "${CONFIG_BASE}/roms"
+	# One-time compatibility move from older layout where VMs/ROMs lived under SPHERE86_DATA_ROOT.
+	if [[ -d "${APP_DATA_ROOT}/vms" ]] && [[ -z "$(ls -A "${CONFIG_BASE}/vms" 2>/dev/null || true)" ]]; then
+		mv "${APP_DATA_ROOT}/vms/." "${CONFIG_BASE}/vms/" 2>/dev/null || true
+	fi
+	if [[ -d "${APP_DATA_ROOT}/roms" ]] && [[ -z "$(ls -A "${CONFIG_BASE}/roms" 2>/dev/null || true)" ]]; then
+		mv "${APP_DATA_ROOT}/roms/." "${CONFIG_BASE}/roms/" 2>/dev/null || true
+	fi
 	mkdir -p "$(dirname "${ROMS_PATH}")"
 	ln -sfn "${CONFIG_BASE}/roms" "${ROMS_PATH}"
 	chown -R "${BOX_USER}:${BOX_USER}" "${APP_DATA_ROOT}" || true

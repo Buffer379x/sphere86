@@ -8,10 +8,10 @@ This folder contains `sphere86.xml`, a template compatible with Unraid’s **Com
    Open `sphere86.xml` and replace every `OWNER` with your GitHub username or organization (the same segment used in your container image path, e.g. `ghcr.io/myorg/sphere86:latest`).
 
 2. **Image**  
-   The template uses `ghcr.io/OWNER/sphere86:[BRANCH]` so you can pick:
-   - `latest` (stable)
-   - `beta`
-   - explicit tags (for example `v1.1.0-beta`)
+   The template defaults to `ghcr.io/OWNER/sphere86:latest`.  
+   If you want another channel, edit the repository tag manually:
+   - `:beta`
+   - explicit versions (for example `:v1.1.0-beta`)
 
 3. **Template URL**  
    After you push to GitHub, set `<TemplateURL>` to the raw URL of this file on your default branch, for example:  
@@ -47,7 +47,7 @@ These align with `Dockerfile` defaults and `docker-compose.yml` for embedded mod
    - **Sphere86 Data** path
    - **Sunshine Data** path
    - **86Box Data** path
-   - optional **BRANCH**
+   - optional image tag change in **Repository** (latest/beta/version)
 
 ## Checklist
 

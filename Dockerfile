@@ -25,6 +25,7 @@ WORKDIR /app
 COPY --from=builder /app/build ./build
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./
+COPY --from=builder /app/VERSION ./VERSION
 COPY --from=builder /app/tools/scripts ./scripts
 COPY --from=builder /app/tools/container ./scripts/container
 

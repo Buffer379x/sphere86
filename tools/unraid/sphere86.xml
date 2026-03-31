@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <Container version="2">
   <Name>sphere86</Name>
-  <Repository>ghcr.io/buffer379x/sphere86:[BRANCH]</Repository>
+  <Repository>ghcr.io/buffer379x/sphere86:latest</Repository>
   <Registry>https://ghcr.io</Registry>
   <Icon>https://raw.githubusercontent.com/buffer379x/sphere86/main/static/logo.png</Icon>
   <Network>bridge</Network>
@@ -13,11 +13,11 @@
     Sphere86: web UI for 86Box configs and Sunshine publishing with embedded Sunshine + 86Box runtime.
     Configure separate persistent paths for Sphere86 (/data/sphere86), Sunshine (/data/sunshine), and 86Box (/data/86box).
     Set SPHERE86_SECRET to a stable random value of at least 32 characters.
+    Default image tag is latest; to use beta/other tags, edit the Repository value (e.g. :beta or :v1.1.0-beta).
   </Overview>
   <Category>Productivity: Tools</Category>
   <WebUI>http://[IP]:[PORT:3000]/</WebUI>
   <TemplateURL>https://raw.githubusercontent.com/buffer379x/sphere86/main/tools/unraid/sphere86.xml</TemplateURL>
-  <Config Name="BRANCH" Target="BRANCH" Default="latest" Description="Image tag: latest (stable), beta, or a version tag (e.g. v1.1.0-beta)" Type="Variable" Display="always" Required="true" Mask="false"/>
   <Config Name="Sphere86 Web UI Port" Target="3000" Default="3000" Mode="tcp" Description="HTTP port for Sphere86 web UI" Type="Port" Display="always" Required="true" Mask="false"/>
   <Config Name="Sunshine API/Web UI Port" Target="47990" Default="47990" Mode="tcp" Description="Sunshine API + HTTPS Web UI port" Type="Port" Display="always" Required="true" Mask="false"/>
   <Config Name="Sunshine Stream Port (TCP)" Target="47989" Default="47989" Mode="tcp" Description="Sunshine stream/session TCP port" Type="Port" Display="always" Required="true" Mask="false"/>

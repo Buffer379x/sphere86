@@ -144,6 +144,12 @@ Embedded mode ports:
 - `47990/tcp` Sunshine API/Web UI (HTTPS)
 - `47984/tcp+udp`, `47989/tcp+udp`, `48010/tcp`, `47998-48010/udp` Moonlight streaming/discovery
 
+Persistent path layout (single-image mode):
+
+- `/data/sphere86` -> Sphere86 DB/logs/cache
+- `/data/sunshine` -> Sunshine config/credentials
+- `/data/86box` -> VMs (`vms/<uuid>`) and ROMs (`roms`)
+
 ## Streaming host setup
 
 On a fresh **Debian 12** or **Ubuntu 22.04+** machine, download and run the wizard (replace `OWNER` with your GitHub user or organization — same idea as in the Unraid section below):

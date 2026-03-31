@@ -21,6 +21,7 @@ import {
 } from '$lib/server/sunshine/client.js';
 import { embeddedHostEnabled } from '$lib/server/embedded-host.js';
 import { BOX86_ROMS_PATH, SPHERE86_DATA_ROOT } from '$lib/server/runtime-paths.js';
+import { getAppVersion } from '$lib/server/app-version.js';
 
 async function getEmbeddedHostRow() {
 	const row = await db
@@ -98,6 +99,7 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 		latestRelease,
 		latestRoms,
 		settings: settingsMap,
+		appVersion: getAppVersion(),
 		dataRoot: SPHERE86_DATA_ROOT,
 		currentUsername: locals.user?.username || 'admin',
 		logContent,
@@ -206,26 +208,37 @@ export const actions: Actions = {
 				const response = await fetch(asset.downloadUrl);
 				if (!response.ok) throw new Error(`Download failed: ${response.status}`);
 
-				const { writeFileSync, mkdirSync, existsSync, rmSync } = await import('fs');
+				const { writeFileSync, mkdirSync, existsSync, rmSync, realpathSync, unlinkSync } = await import('fs');
 				const { join } = await import('path');
 				const romsDir = BOX86_ROMS_PATH;
-				mkdirSync(romsDir, { recursive: true });
 				const buffer = Buffer.from(await response.arrayBuffer());
 				const archivePath = join(SPHERE86_DATA_ROOT, 'cache', 'roms', asset.name);
 				mkdirSync(join(SPHERE86_DATA_ROOT, 'cache', 'roms'), { recursive: true });
 				writeFileSync(archivePath, buffer);
 
 				await updateJob(job.id, { progress: 0.8, message: 'Extracting ROM set...' });
-				// Refresh ROM folder to keep extracted standard path deterministic.
-				if (existsSync(romsDir)) rmSync(romsDir, { recursive: true, force: true });
-				mkdirSync(romsDir, { recursive: true });
+				// Resolve symlinks so we refresh the persistent target folder, not the symlink node.
+				const romsTargetDir = (() => {
+					try {
+						return realpathSync(romsDir);
+					} catch {
+						return romsDir;
+					}
+				})();
+				if (existsSync(romsTargetDir)) rmSync(romsTargetDir, { recursive: true, force: true });
+				mkdirSync(romsTargetDir, { recursive: true });
 
 				if (asset.name.endsWith('.zip')) {
 					const extractZip = (await import('extract-zip')).default;
-					await extractZip(archivePath, { dir: romsDir });
+					await extractZip(archivePath, { dir: romsTargetDir });
 				} else if (asset.name.endsWith('.tar.gz') || asset.name.endsWith('.tgz')) {
 					const { execSync } = await import('child_process');
-					execSync(`tar xzf "${archivePath}" --strip-components=1 -C "${romsDir}"`);
+					execSync(`tar xzf "${archivePath}" --strip-components=1 -C "${romsTargetDir}"`);
+				}
+				try {
+					unlinkSync(archivePath);
+				} catch {
+					/* ignore */
 				}
 
 				await updateJob(job.id, { status: 'completed', progress: 1, message: `ROMs extracted (${release.tag})`, result: release.tag });

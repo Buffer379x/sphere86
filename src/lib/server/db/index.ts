@@ -11,7 +11,7 @@ const dbPath = (env.DATABASE_URL || 'file:./data/sphere86/config/sphere86.db').r
 const dataRoot = SPHERE86_DATA_ROOT;
 
 // Ensure standard folder structure
-const dirs = ['vms', 'roms', 'logs', 'config', 'cache'];
+const dirs = ['logs', 'config', 'cache'];
 for (const dir of dirs) {
 	mkdirSync(join(dataRoot, dir), { recursive: true });
 }
