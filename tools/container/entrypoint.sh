@@ -6,7 +6,8 @@ DISPLAY_VAL="${SPHERE86_EMBEDDED_X11_DISPLAY:-:0}"
 XDG_RUNTIME_DIR="/run/user/$(id -u "${BOX_USER}" 2>/dev/null || echo 1000)"
 XVFB_SCREEN="${SPHERE86_XVFB_SCREEN:-1920x1080x24}"
 PULSE_SERVER="unix:${XDG_RUNTIME_DIR}/pulse/native"
-FORCE_XTEST_INPUT="${SPHERE86_FORCE_XTEST_INPUT:-true}"
+FORCE_XTEST_INPUT="${SPHERE86_FORCE_XTEST_INPUT:-false}"
+USE_XORG="${SPHERE86_USE_XORG:-auto}"
 
 log() { echo "[entrypoint] $*"; }
 
@@ -20,6 +21,11 @@ cleanup() {
 	wait || true
 }
 trap cleanup EXIT INT TERM
+
+run_bg() {
+	"$@" &
+	pids+=("$!")
+}
 
 run_as_user_bg() {
 	local cmd="$1"
@@ -69,7 +75,6 @@ if not allowed:
     print(f"[entrypoint] WARNING: {user} likely cannot access {dev} (permission bits).")
 PY
 
-	# Real open test as BOX_USER catches cgroup/device policy denials.
 	if runuser -u "$BOX_USER" -- python3 - "$dev" <<'PY'
 import os, sys
 dev = sys.argv[1]
@@ -80,6 +85,49 @@ PY
 		log "Input probe success: ${BOX_USER} can open ${dev}"
 	else
 		log "WARNING: ${BOX_USER} cannot open ${dev}. Mouse/keyboard passthrough will not work."
+	fi
+}
+
+should_use_xorg() {
+	local mode="${USE_XORG,,}"
+	if [[ "${mode}" == "true" || "${mode}" == "1" || "${mode}" == "yes" ]]; then
+		return 0
+	fi
+	if [[ "${mode}" == "false" || "${mode}" == "0" || "${mode}" == "no" ]]; then
+		return 1
+	fi
+	# auto: use Xorg if the dummy driver is available
+	if command -v Xorg >/dev/null 2>&1 && [[ -f /app/scripts/container/xorg-dummy.conf ]]; then
+		return 0
+	fi
+	return 1
+}
+
+start_display_server() {
+	if should_use_xorg; then
+		log "Starting Xorg with dummy driver on ${DISPLAY_VAL}..."
+
+		# Xorg needs a VT; create a minimal /dev/tty0 if missing.
+		[[ -e /dev/tty0 ]] || mknod /dev/tty0 c 4 0 2>/dev/null || true
+		chmod 666 /dev/tty0 2>/dev/null || true
+		[[ -e /dev/tty7 ]] || mknod /dev/tty7 c 4 7 2>/dev/null || true
+		chmod 666 /dev/tty7 2>/dev/null || true
+
+		# udevd is needed so Xorg can hotplug input devices created later by Sunshine (via uinput).
+		if command -v udevd >/dev/null 2>&1; then
+			udevd --daemon 2>/dev/null || true
+			udevadm trigger 2>/dev/null || true
+			log "udevd started for input hotplug."
+		fi
+
+		run_bg Xorg "${DISPLAY_VAL}" vt7 \
+			-noreset +extension GLX +extension RANDR +extension RENDER \
+			-logfile /tmp/Xorg.log \
+			-config /app/scripts/container/xorg-dummy.conf \
+			-novtswitch -sharevts -nolisten tcp -ac
+	else
+		log "Starting Xvfb on ${DISPLAY_VAL} (${XVFB_SCREEN})..."
+		run_as_user_bg "export DISPLAY='${DISPLAY_VAL}'; export XDG_RUNTIME_DIR='${XDG_RUNTIME_DIR}'; export PULSE_SERVER='${PULSE_SERVER}'; Xvfb '${DISPLAY_VAL}' -screen 0 '${XVFB_SCREEN}' -ac +extension GLX +extension XTEST +render -noreset"
 	fi
 }
 
@@ -94,7 +142,7 @@ main() {
 	chmod 666 /dev/uinput 2>/dev/null || true
 	chmod 666 /dev/uhid 2>/dev/null || true
 	if [[ "${FORCE_XTEST_INPUT}" == "1" || "${FORCE_XTEST_INPUT}" == "true" || "${FORCE_XTEST_INPUT}" == "yes" ]]; then
-		log "Forcing Sunshine XTest-style input fallback (uinput/uhid disabled for BOX_USER)."
+		log "Forcing XTest-style input fallback (uinput/uhid blocked for BOX_USER)."
 		chmod 000 /dev/uinput 2>/dev/null || true
 		chmod 000 /dev/uhid 2>/dev/null || true
 	fi
@@ -125,14 +173,25 @@ main() {
 	log "Starting PulseAudio..."
 	run_as_user_bg "export XDG_RUNTIME_DIR='${XDG_RUNTIME_DIR}'; pulseaudio --daemonize=yes --exit-idle-time=-1 --log-target=stderr"
 
-	log "Starting Xvfb on ${DISPLAY_VAL} (${XVFB_SCREEN})..."
-	run_as_user_bg "export DISPLAY='${DISPLAY_VAL}'; export XDG_RUNTIME_DIR='${XDG_RUNTIME_DIR}'; export PULSE_SERVER='${PULSE_SERVER}'; Xvfb '${DISPLAY_VAL}' -screen 0 '${XVFB_SCREEN}' -ac +extension GLX +extension XTEST +render -noreset"
+	start_display_server
 
-	sleep 1
+	# Wait for the X socket to appear before launching window manager and Sunshine.
+	local x_sock="/tmp/.X11-unix/X${DISPLAY_VAL#:}"
+	local waited=0
+	while [[ ! -e "${x_sock}" ]] && (( waited < 10 )); do
+		sleep 1
+		(( waited++ )) || true
+	done
+	if [[ ! -e "${x_sock}" ]]; then
+		log "WARNING: X socket ${x_sock} not found after ${waited}s — continuing anyway."
+	else
+		log "X server ready (${x_sock} appeared after ~${waited}s)."
+	fi
+
 	log "Starting lightweight X session..."
 	run_as_user_bg "export DISPLAY='${DISPLAY_VAL}'; export XDG_RUNTIME_DIR='${XDG_RUNTIME_DIR}'; export PULSE_SERVER='${PULSE_SERVER}'; dbus-launch --exit-with-session openbox"
 
-	sleep 2
+	sleep 1
 	log "Starting Sunshine..."
 	run_as_user_bg "export DISPLAY='${DISPLAY_VAL}'; export XDG_RUNTIME_DIR='${XDG_RUNTIME_DIR}'; export PULSE_SERVER='${PULSE_SERVER}'; export XAUTHORITY='/home/${BOX_USER}/.Xauthority'; sunshine"
 
@@ -141,4 +200,3 @@ main() {
 }
 
 main "$@"
-

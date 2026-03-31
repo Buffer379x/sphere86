@@ -66,7 +66,7 @@ This repository now supports running the full stack in one container:
 - Sphere86 app
 - Sunshine
 - 86Box
-- Xvfb + lightweight X session (Openbox, software rendering)
+- Xorg (dummy driver) + lightweight X session (Openbox, software rendering)
 
 `docker-compose.yml` is preconfigured for this mode (`privileged: true` and Sunshine ports exposed).  
 The container bootstrap creates/updates an **embedded managed host** in Sphere86 automatically.
@@ -132,7 +132,8 @@ Additional embedded-mode variables:
 | `SPHERE86_EMBEDDED_SUNSHINE_SCHEME` | `auto` | `http`, `https`, or `auto` |
 | `SUNSHINE_CONFIG_BASE_PATH` | `/data/sunshine` | Persistent Sunshine config root |
 | `SUNSHINE_STREAM_PORT` | `47989` | Moonlight streaming/discovery port base written into Sunshine config |
-| `SPHERE86_FORCE_XTEST_INPUT` | `true` | Blocks `/dev/uinput`/`/dev/uhid` so Sunshine uses XTest for mouse/keyboard (required for Xvfb). Set `false` only when using a real Xorg display. |
+| `SPHERE86_FORCE_XTEST_INPUT` | `false` | Blocks `/dev/uinput`/`/dev/uhid` so Sunshine uses XTest. Leave `false` (Xorg default). Set `true` only for legacy Xvfb mode. |
+| `SPHERE86_USE_XORG` | `auto` | Display server: `auto` (Xorg when available), `true` (force Xorg), `false` (force Xvfb). Xorg + uinput is required for Sunshine input. |
 | `SUNSHINE_WEB_USERNAME` | `admin` | Initial Sunshine Web UI user |
 | `SUNSHINE_WEB_PASSWORD` | `sunshine` | Initial Sunshine Web UI password |
 | `SUNSHINE_FORCE_INIT_CREDS` | `false` | If `true`, re-runs `sunshine --creds` on startup (normally skipped to preserve pairing state) |
@@ -160,13 +161,16 @@ Moonlight pairing persistence notes:
 - Bootstrap applies `SUNSHINE_WEB_USERNAME` / `SUNSHINE_WEB_PASSWORD` only on first initialization.
 - Re-running credentials explicitly (`SUNSHINE_FORCE_INIT_CREDS=true`) can require re-pairing Moonlight clients.
 
-Input in embedded mode (Xvfb):
+Input in embedded mode:
 
-- Xvfb does **not** read from kernel input devices (`/dev/input/event*`), so uinput virtual devices alone cannot deliver keyboard/mouse events.
-- Sunshine uses **XTest** (`libXtst`) to inject keyboard and mouse events directly into the X server.
-- `SPHERE86_FORCE_XTEST_INPUT=true` (the default) blocks `/dev/uinput` so Sunshine reliably falls back to the XTest path.
-- `libxtst6` is installed in the image to ensure the XTest library is always available.
-- The `xdotool` package is included for manual diagnostics (`DISPLAY=:0 xdotool key a`).
+The container uses **Xorg with the dummy video driver** instead of Xvfb.
+Xorg reads kernel input events via libinput, so Sunshine's virtual devices (created through `/dev/uinput`) work natively for mouse, keyboard, and gamepad passthrough.
+
+- `/dev/uinput` and `/dev/uhid` are set to mode `666` at startup so the unprivileged container user can create virtual input devices.
+- `udevd` runs inside the container to handle hotplug of virtual input devices created by Sunshine during a streaming session.
+- `SPHERE86_USE_XORG=auto` (default) automatically selects Xorg when the dummy driver is available; set to `false` to force legacy Xvfb mode.
+- `SPHERE86_FORCE_XTEST_INPUT=false` (default) keeps uinput open. Set to `true` only for legacy Xvfb mode where XTest fallback is needed.
+- `libxtst6` and `xdotool` remain installed for diagnostics (`DISPLAY=:0 xdotool key a`).
 
 ## Streaming host setup
 

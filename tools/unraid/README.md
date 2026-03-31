@@ -34,6 +34,8 @@ This folder contains `sphere86.xml`, a template compatible with Unraid’s **Com
 | **BOX86_CONFIG_BASE_PATH** | Default `/data/86box`. |
 | **SPHERE86_EMBEDDED_HOST_PUBLIC_ADDRESS** | Optional override for embedded host links shown in Sphere86 UI. |
 | **SPHERE86_SUNSHINE_NAME** | Sunshine host name shown in Moonlight (`sunshine_name`). |
+| **SPHERE86_USE_XORG** | Display server: `auto` (Xorg when available), `true`/`false`. Xorg is required for Sunshine mouse/keyboard. |
+| **SPHERE86_FORCE_XTEST_INPUT** | `false` (default). Set `true` only for legacy Xvfb mode. |
 | **SUNSHINE_FORCE_INIT_CREDS** | Keep `false` to preserve existing Moonlight pairing; set `true` only when intentionally resetting Sunshine credentials. |
 | **NODE_ENV** | `production` |
 | **PORT** | Internal Sphere86 HTTP port (default 3000). |

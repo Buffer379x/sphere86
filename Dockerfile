@@ -15,6 +15,7 @@ FROM node:22-slim AS runtime
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates curl unzip python3 jq \
     dbus dbus-x11 xauth x11-xserver-utils xvfb openbox \
+    xserver-xorg-core xserver-xorg-video-dummy xserver-xorg-input-libinput \
     avahi-daemon avahi-utils libnss-mdns \
     libgl1-mesa-dri mesa-utils pulseaudio \
     tini procps kmod udev libcap2-bin \
@@ -53,7 +54,8 @@ ENV BOX86_CONFIG_BASE_PATH=/data/86box
 ENV BOX86_BINARY_PATH=/usr/local/bin/86Box
 ENV BOX86_ROMS_PATH=/opt/86box/roms
 ENV SUNSHINE_STREAM_PORT=47989
-ENV SPHERE86_FORCE_XTEST_INPUT=true
+ENV SPHERE86_FORCE_XTEST_INPUT=false
+ENV SPHERE86_USE_XORG=auto
 ENV SUNSHINE_WEB_USERNAME=admin
 ENV SUNSHINE_WEB_PASSWORD=sunshine
 ENV SUNSHINE_FORCE_INIT_CREDS=false
