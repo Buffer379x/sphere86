@@ -155,6 +155,13 @@ Persistent path layout (single-image mode):
 - `/data/sunshine` -> Sunshine config/credentials
 - `/data/86box` -> VMs (`vms/<uuid>`) and ROMs (`roms`)
 
+Sunshine update:
+
+The embedded Sunshine binary can be updated without rebuilding the container image.
+In **Settings → Embedded Sunshine Host**, the installed and latest available versions are shown.
+Click **Update Sunshine** to download and install the latest release — configuration, credentials, and Moonlight pairing are preserved (they live in `/data/sunshine`).
+The update can also be triggered via the CLI: `docker exec <container> /app/scripts/container/update-sunshine.sh`.
+
 Moonlight pairing persistence notes:
 
 - Keep `/data/sunshine` on a persistent host volume.

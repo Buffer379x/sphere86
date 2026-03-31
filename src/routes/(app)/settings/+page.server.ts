@@ -22,6 +22,12 @@ import {
 import { embeddedHostEnabled } from '$lib/server/embedded-host.js';
 import { BOX86_ROMS_PATH, SPHERE86_DATA_ROOT } from '$lib/server/runtime-paths.js';
 import { getAppVersion } from '$lib/server/app-version.js';
+import {
+	getLatestSunshineRelease,
+	getInstalledSunshineVersion,
+	canRunSunshineUpdate,
+	runSunshineUpdate
+} from '$lib/server/sunshine/updater.js';
 
 async function getEmbeddedHostRow() {
 	const row = await db
@@ -38,9 +44,13 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 
 	let latestRelease = null;
 	let latestRoms = null;
+	let latestSunshine = null;
+	let installedSunshineVersion: string | null = null;
 
 	try { latestRelease = await getLatest86BoxRelease(); } catch { /* offline */ }
 	try { latestRoms = await getLatestRomsRelease(); } catch { /* offline */ }
+	try { latestSunshine = await getLatestSunshineRelease(); } catch { /* offline */ }
+	try { installedSunshineVersion = getInstalledSunshineVersion(); } catch { /* */ }
 
 	const allSettings = await db.select().from(settings).all();
 	const settingsMap = Object.fromEntries(allSettings.map(s => [s.key, s.value]));
@@ -98,6 +108,9 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 		changePasswordPrompt,
 		latestRelease,
 		latestRoms,
+		latestSunshine,
+		installedSunshineVersion,
+		sunshineUpdateAvailable: canRunSunshineUpdate(),
 		settings: settingsMap,
 		appVersion: getAppVersion(),
 		dataRoot: SPHERE86_DATA_ROOT,
@@ -321,6 +334,37 @@ export const actions: Actions = {
 			`port=${apiPort}, upnp=${upnp}, origin_web_ui_allowed=${originAllowed}, sunshine_name=${sunshineName || '(unchanged)'}, restart=${doRestart}`
 		);
 		return { embeddedConfigSaved: true };
+	},
+
+	updateSunshine: async ({ locals }) => {
+		if (!canRunSunshineUpdate()) {
+			return fail(400, { error: 'Sunshine update is only available in embedded/container mode.' });
+		}
+		const job = await createJob('update_sunshine');
+
+		(async () => {
+			try {
+				await updateJob(job.id, { status: 'running', message: 'Starting Sunshine update...' });
+				await runSunshineUpdate((line) => {
+					updateJob(job.id, { message: line }).catch(() => {});
+				});
+				const newVersion = getInstalledSunshineVersion();
+				await updateJob(job.id, {
+					status: 'completed',
+					progress: 1,
+					message: `Sunshine updated to ${newVersion ?? 'latest'}`,
+					result: newVersion ?? 'updated'
+				});
+			} catch (err) {
+				await updateJob(job.id, {
+					status: 'failed',
+					message: err instanceof Error ? err.message : 'Unknown error'
+				});
+			}
+		})();
+
+		await logAudit(locals.user?.id ?? null, 'update_sunshine', 'system', job.id);
+		return { jobStarted: true, jobId: job.id };
 	},
 
 	deleteJob: async ({ request }) => {

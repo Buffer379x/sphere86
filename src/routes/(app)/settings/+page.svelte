@@ -23,6 +23,7 @@
 		if (form?.ok === false) notify('error', form.message ?? 'Hardware database refresh failed.');
 		if (form?.embeddedConfigSaved) notify('success', 'Embedded Sunshine configuration saved.');
 		if (form?.embeddedConfigError) notify('error', form.embeddedConfigError);
+		if (form?.sunshineUpdateStarted) notify('info', 'Sunshine update started. Check the Jobs tab.');
 	});
 
 	function downloadLog() {
@@ -174,11 +175,45 @@
 
 		{#if data.embeddedHostEnabled}
 			<div class="card-elevated">
-				<h2 class="text-base font-semibold mb-2">Embedded Sunshine Host</h2>
-				{#if data.embeddedHost}
-					<p class="text-sm mb-4" style="color: var(--theme-on-surface-variant);">
+			<h2 class="text-base font-semibold mb-2">Embedded Sunshine Host</h2>
+			{#if data.embeddedHost}
+				<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
+					<p class="text-sm" style="color: var(--theme-on-surface-variant);">
 						Managed host: <span class="font-mono">{data.embeddedHost.address}:{data.embeddedHost.port}</span>
 					</p>
+					<div class="flex items-center gap-3 text-sm">
+						{#if data.installedSunshineVersion}
+							<span style="color: var(--theme-on-surface-variant);">
+								Installed: <span class="font-mono" style="color: var(--theme-primary);">{data.installedSunshineVersion}</span>
+							</span>
+						{/if}
+						{#if data.latestSunshine}
+							<span style="color: var(--theme-on-surface-variant);">
+								Latest: <span class="font-mono" style="color: var(--theme-primary);">{data.latestSunshine.tag}</span>
+							</span>
+						{/if}
+					</div>
+				</div>
+				{#if data.sunshineUpdateAvailable}
+					{@const installedNorm = (data.installedSunshineVersion ?? '').replace(/^v/, '')}
+					{@const latestNorm = (data.latestSunshine?.tag ?? '').replace(/^v/, '')}
+					{@const needsUpdate = installedNorm && latestNorm && !installedNorm.includes(latestNorm)}
+					{#if needsUpdate}
+						<div class="flex flex-col sm:flex-row sm:items-center gap-3 mb-4 py-2 px-3 rounded-md text-sm"
+							 style="background: color-mix(in srgb, var(--theme-warning) 15%, transparent); color: var(--theme-warning);">
+							<span>Sunshine update available: <strong>{data.latestSunshine?.tag}</strong></span>
+							<form method="POST" action="?/updateSunshine" use:enhance class="sm:ml-auto">
+								<button type="submit" class="btn-primary text-xs py-1 px-3">Update Sunshine</button>
+							</form>
+						</div>
+					{:else}
+						<div class="mb-4">
+							<form method="POST" action="?/updateSunshine" use:enhance>
+								<button type="submit" class="btn-secondary text-xs">Reinstall / Force Update Sunshine</button>
+							</form>
+						</div>
+					{/if}
+				{/if}
 					{#if data.embeddedSunshineConfigError}
 						<div class="text-sm py-2 px-3 rounded-md mb-3"
 							 style="background: color-mix(in srgb, var(--theme-warning) 15%, transparent); color: var(--theme-warning);">

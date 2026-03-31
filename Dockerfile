@@ -31,7 +31,8 @@ COPY --from=builder /app/VERSION ./VERSION
 COPY --from=builder /app/tools/scripts ./scripts
 COPY --from=builder /app/tools/container ./scripts/container
 
-RUN chmod +x /app/scripts/container/*.sh
+RUN chmod +x /app/scripts/container/*.sh \
+    && cp /app/scripts/container/99-input-permissions.rules /etc/udev/rules.d/ 2>/dev/null || true
 
 ENV NODE_ENV=production
 ENV PORT=3000

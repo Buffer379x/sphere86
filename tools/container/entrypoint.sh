@@ -113,11 +113,30 @@ start_display_server() {
 		[[ -e /dev/tty7 ]] || mknod /dev/tty7 c 4 7 2>/dev/null || true
 		chmod 666 /dev/tty7 2>/dev/null || true
 
-		# udevd is needed so Xorg can hotplug input devices created later by Sunshine (via uinput).
-		if command -v udevd >/dev/null 2>&1; then
-			udevd --daemon 2>/dev/null || true
-			udevadm trigger 2>/dev/null || true
-			log "udevd started for input hotplug."
+		# udevd is needed so Xorg can hotplug input devices created by Sunshine (via uinput).
+		# Install udev rule for input device permissions if not already present.
+		if [[ -f /app/scripts/container/99-input-permissions.rules ]]; then
+			mkdir -p /etc/udev/rules.d
+			cp -f /app/scripts/container/99-input-permissions.rules /etc/udev/rules.d/
+		fi
+
+		local udevd_bin=""
+		for candidate in /usr/lib/systemd/systemd-udevd /lib/systemd/systemd-udevd /sbin/udevd /usr/sbin/udevd; do
+			if [[ -x "${candidate}" ]]; then
+				udevd_bin="${candidate}"
+				break
+			fi
+		done
+		command -v udevd >/dev/null 2>&1 && udevd_bin="$(command -v udevd)"
+
+		if [[ -n "${udevd_bin}" ]]; then
+			"${udevd_bin}" --daemon 2>/dev/null || "${udevd_bin}" -d 2>/dev/null || true
+			sleep 0.5
+			udevadm trigger --action=add 2>/dev/null || true
+			udevadm settle --timeout=5 2>/dev/null || true
+			log "udevd started (${udevd_bin}) for input hotplug."
+		else
+			log "WARNING: udevd not found. Input device hotplug will not work."
 		fi
 
 		run_bg Xorg "${DISPLAY_VAL}" vt7 \
@@ -141,6 +160,9 @@ main() {
 	[[ -e /dev/uhid ]] || mknod /dev/uhid c 10 239 2>/dev/null || true
 	chmod 666 /dev/uinput 2>/dev/null || true
 	chmod 666 /dev/uhid 2>/dev/null || true
+	# Ensure existing /dev/input devices are accessible (host-passed and uinput-created).
+	chmod 666 /dev/input/event* 2>/dev/null || true
+	chmod 666 /dev/input/mice 2>/dev/null || true
 	if [[ "${FORCE_XTEST_INPUT}" == "1" || "${FORCE_XTEST_INPUT}" == "true" || "${FORCE_XTEST_INPUT}" == "yes" ]]; then
 		log "Forcing XTest-style input fallback (uinput/uhid blocked for BOX_USER)."
 		chmod 000 /dev/uinput 2>/dev/null || true
