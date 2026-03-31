@@ -3,6 +3,7 @@ services:
     image: sphere86:latest
     build: .
     container_name: sphere86
+    hostname: ${SPHERE86_CONTAINER_HOSTNAME:-sphere86}
     restart: unless-stopped
     privileged: true
     network_mode: bridge
@@ -25,6 +26,7 @@ services:
       - SPHERE86_SINGLE_IMAGE_MODE=true
       - SPHERE86_EMBEDDED_HOST=true
       - SPHERE86_EMBEDDED_HOST_NAME=${SPHERE86_EMBEDDED_HOST_NAME:-Embedded Local Host}
+      - SPHERE86_SUNSHINE_NAME=${SPHERE86_SUNSHINE_NAME:-Embedded Local Host}
       - SPHERE86_EMBEDDED_HOST_ADDRESS=127.0.0.1
       - SPHERE86_EMBEDDED_HOST_PORT=47990
       - SPHERE86_EMBEDDED_SUNSHINE_SCHEME=auto
@@ -39,6 +41,7 @@ services:
       - SPHERE86_FORCE_XTEST_INPUT=true
       - SUNSHINE_WEB_USERNAME=${SUNSHINE_WEB_USERNAME:-admin}
       - SUNSHINE_WEB_PASSWORD=${SUNSHINE_WEB_PASSWORD:-sunshine}
+      - SUNSHINE_FORCE_INIT_CREDS=${SUNSHINE_FORCE_INIT_CREDS:-false}
       # Optional: temporary GitHub API token to avoid low anonymous rate limits during bootstrap.
       - GITHUB_TOKEN=${GITHUB_TOKEN:-}
       - GITHUB_API_TOKEN=${GITHUB_API_TOKEN:-}

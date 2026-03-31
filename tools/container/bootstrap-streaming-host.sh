@@ -14,6 +14,8 @@ ROMS_PATH="${BOX86_ROMS_PATH:-/opt/86box/roms}"
 BOX86_BINARY_PATH="${BOX86_BINARY_PATH:-/usr/local/bin/86Box}"
 SUNSHINE_UI_USER="${SUNSHINE_WEB_USERNAME:-admin}"
 SUNSHINE_UI_PASS="${SUNSHINE_WEB_PASSWORD:-sunshine}"
+SUNSHINE_NAME="${SPHERE86_SUNSHINE_NAME:-${SPHERE86_EMBEDDED_HOST_NAME:-Embedded Local Host}}"
+SUNSHINE_FORCE_INIT_CREDS="${SUNSHINE_FORCE_INIT_CREDS:-false}"
 SUNSHINE_INSTALL_METHOD="${SUNSHINE_INSTALL_METHOD:-auto}" # auto|deb|appimage
 GITHUB_API_TOKEN="${GITHUB_API_TOKEN:-${GITHUB_TOKEN:-}}"
 
@@ -285,8 +287,15 @@ ensure_user() {
 }
 
 write_sunshine_config() {
-	log "Writing Sunshine config."
-	cat > "${BOX_HOME}/.config/sunshine/sunshine.conf" <<EOF
+	local conf="${BOX_HOME}/.config/sunshine/sunshine.conf"
+	if [[ -f "${conf}" ]]; then
+		log "Sunshine config already exists; keeping existing file."
+		chown -R "${BOX_USER}:${BOX_USER}" "${BOX_HOME}/.config"
+		return
+	fi
+	log "Writing initial Sunshine config."
+	cat > "${conf}" <<EOF
+sunshine_name = ${SUNSHINE_NAME}
 origin_web_ui_allowed = lan
 upnp = off
 port = ${SUNSHINE_STREAM_PORT}
@@ -303,8 +312,20 @@ set_sunshine_creds() {
 	if ! command -v sunshine >/dev/null 2>&1; then
 		return 0
 	fi
-	log "Setting Sunshine Web UI credentials."
+	local conf_dir="${BOX_HOME}/.config/sunshine"
+	local state_file="${conf_dir}/sunshine_state.json"
+	local marker_file="${conf_dir}/.sphere86-creds-initialized"
+	local force="${SUNSHINE_FORCE_INIT_CREDS,,}"
+	if [[ "${force}" != "1" && "${force}" != "true" && "${force}" != "yes" && "${force}" != "on" ]]; then
+		if [[ -s "${state_file}" || -f "${marker_file}" ]]; then
+			log "Keeping existing Sunshine credentials/pairing state."
+			return 0
+		fi
+	fi
+	log "Setting initial Sunshine Web UI credentials."
 	runuser -u "$BOX_USER" -- sunshine --creds "$SUNSHINE_UI_USER" "$SUNSHINE_UI_PASS" >/dev/null 2>&1 || true
+	touch "${marker_file}" || true
+	chown "${BOX_USER}:${BOX_USER}" "${marker_file}" 2>/dev/null || true
 }
 
 ensure_sunshine_runtime_compat() {

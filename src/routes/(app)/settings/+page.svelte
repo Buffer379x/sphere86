@@ -188,6 +188,17 @@
 					<form method="POST" action="?/updateEmbeddedSunshine" use:enhance class="space-y-4">
 						<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
 							<div>
+								<label for="sunshineName" class="label">Sunshine host name (Moonlight)</label>
+								<input
+									id="sunshineName"
+									name="sunshineName"
+									type="text"
+									class="input-field"
+									value={data.embeddedSunshineConfig?.sunshine_name ?? data.embeddedHost.name}
+									placeholder="Embedded Local Host"
+								/>
+							</div>
+							<div>
 								<label for="apiPort" class="label">Sunshine API port</label>
 								<input
 									id="apiPort"

@@ -272,6 +272,7 @@ export const actions: Actions = {
 		const apiPortRaw = data.get('apiPort')?.toString().trim() || '47990';
 		const upnp = data.get('upnp')?.toString().trim() || 'off';
 		const originAllowed = data.get('originWebUiAllowed')?.toString().trim() || 'lan';
+		const sunshineName = data.get('sunshineName')?.toString().trim() || '';
 		const doRestart = data.get('restartAfterSave') === 'on';
 		const apiPort = Number(apiPortRaw);
 
@@ -295,11 +296,13 @@ export const actions: Actions = {
 		};
 
 		try {
-			await updateConfig(sunshineHost, {
+			const patch: Record<string, string> = {
 				port: String(apiPort),
 				upnp,
 				origin_web_ui_allowed: originAllowed
-			});
+			};
+			if (sunshineName) patch.sunshine_name = sunshineName;
+			await updateConfig(sunshineHost, patch);
 			if (doRestart) {
 				await restartSunshine(sunshineHost);
 			}
@@ -315,7 +318,7 @@ export const actions: Actions = {
 			'update_embedded_sunshine',
 			'streaming_host',
 			embeddedHost.id,
-			`port=${apiPort}, upnp=${upnp}, origin_web_ui_allowed=${originAllowed}, restart=${doRestart}`
+			`port=${apiPort}, upnp=${upnp}, origin_web_ui_allowed=${originAllowed}, sunshine_name=${sunshineName || '(unchanged)'}, restart=${doRestart}`
 		);
 		return { embeddedConfigSaved: true };
 	},

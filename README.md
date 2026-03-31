@@ -124,6 +124,8 @@ Additional embedded-mode variables:
 | `SPHERE86_SINGLE_IMAGE_MODE` | `true` | Enables single-image behavior and embedded host registration |
 | `SPHERE86_EMBEDDED_HOST` | `true` | Enables managed local streaming host bootstrap |
 | `SPHERE86_EMBEDDED_HOST_NAME` | `Embedded Local Host` | Name shown in the Hosts page |
+| `SPHERE86_SUNSHINE_NAME` | `Embedded Local Host` | Sunshine host name advertised to Moonlight (`sunshine_name`) |
+| `SPHERE86_CONTAINER_HOSTNAME` | `sphere86` | Container hostname (compose `hostname`) used as OS-level host identity |
 | `SPHERE86_EMBEDDED_HOST_ADDRESS` | `127.0.0.1` | Local Sunshine API endpoint inside container |
 | `SPHERE86_EMBEDDED_HOST_PUBLIC_ADDRESS` | empty | Optional public/UI address override shown for embedded host links |
 | `SPHERE86_EMBEDDED_HOST_PORT` | `47990` | Sunshine API / Web UI port |
@@ -133,6 +135,7 @@ Additional embedded-mode variables:
 | `SPHERE86_FORCE_XTEST_INPUT` | `true` | Forces Sunshine to avoid `/dev/uinput` and use XTest fallback (recommended for Xvfb-based embedded mode) |
 | `SUNSHINE_WEB_USERNAME` | `admin` | Initial Sunshine Web UI user |
 | `SUNSHINE_WEB_PASSWORD` | `sunshine` | Initial Sunshine Web UI password |
+| `SUNSHINE_FORCE_INIT_CREDS` | `false` | If `true`, re-runs `sunshine --creds` on startup (normally skipped to preserve pairing state) |
 | `SUNSHINE_INSTALL_METHOD` | `auto` | `auto` tries `.deb` first then AppImage fallback; `deb` or `appimage` force method |
 | `SUNSHINE_DEB_URL` | empty | Optional explicit Sunshine `.deb` URL |
 | `SUNSHINE_APPIMAGE_URL` | empty | Optional explicit Sunshine AppImage URL |
@@ -150,6 +153,12 @@ Persistent path layout (single-image mode):
 - `/data/sphere86` -> Sphere86 DB/logs/cache
 - `/data/sunshine` -> Sunshine config/credentials
 - `/data/86box` -> VMs (`vms/<uuid>`) and ROMs (`roms`)
+
+Moonlight pairing persistence notes:
+
+- Keep `/data/sunshine` on a persistent host volume.
+- Bootstrap applies `SUNSHINE_WEB_USERNAME` / `SUNSHINE_WEB_PASSWORD` only on first initialization.
+- Re-running credentials explicitly (`SUNSHINE_FORCE_INIT_CREDS=true`) can require re-pairing Moonlight clients.
 
 ## Streaming host setup
 

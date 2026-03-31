@@ -33,6 +33,8 @@ This folder contains `sphere86.xml`, a template compatible with Unraid’s **Com
 | **SPHERE86_DATA_ROOT** | Default `/data/sphere86`. |
 | **BOX86_CONFIG_BASE_PATH** | Default `/data/86box`. |
 | **SPHERE86_EMBEDDED_HOST_PUBLIC_ADDRESS** | Optional override for embedded host links shown in Sphere86 UI. |
+| **SPHERE86_SUNSHINE_NAME** | Sunshine host name shown in Moonlight (`sunshine_name`). |
+| **SUNSHINE_FORCE_INIT_CREDS** | Keep `false` to preserve existing Moonlight pairing; set `true` only when intentionally resetting Sunshine credentials. |
 | **NODE_ENV** | `production` |
 | **PORT** | Internal Sphere86 HTTP port (default 3000). |
 | **HOST** | `0.0.0.0` so the server listens inside the container. |
