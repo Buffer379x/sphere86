@@ -219,12 +219,16 @@ install_sunshine() {
 
 install_86box() {
 	if [[ -x /usr/local/bin/86Box ]]; then
-		log "86Box already present."
-		return 0
+		if /usr/local/bin/86Box --help >/dev/null 2>&1; then
+			log "86Box already present."
+			return 0
+		fi
+		log "Existing 86Box binary is not runnable; reinstalling."
+		rm -f /usr/local/bin/86Box
 	fi
 
 	log "Installing 86Box latest Linux/AppImage release..."
-	local api json url file
+	local api json url file candidate
 	api="https://api.github.com/repos/86Box/86Box/releases/latest"
 	json="$(curl -fsSL "$api")"
 	url="$(echo "$json" | jq -r '.assets[] | select(.name | test("Linux.*x86_64|\\.AppImage$")) | .browser_download_url' | head -1)"
@@ -237,16 +241,30 @@ install_86box() {
 	mkdir -p /opt/86box/bin
 	if [[ "${url}" == *.tar.gz ]]; then
 		tar -xzf "$file" -C /opt/86box/bin
-		local candidate
 		candidate="$(ls -1 /opt/86box/bin/86Box* 2>/dev/null | head -1 || true)"
 		if [[ -n "${candidate}" ]]; then
 			chmod +x "${candidate}"
 			ln -sf "${candidate}" /usr/local/bin/86Box
 		fi
 	else
+		# AppImage cannot rely on FUSE inside many container runtimes. Extract once and run AppRun directly.
 		chmod +x "$file"
-		mv "$file" /opt/86box/bin/86Box.AppImage
-		ln -sf /opt/86box/bin/86Box.AppImage /usr/local/bin/86Box
+		rm -rf /opt/86box/squashfs-root /opt/86box/86box-appdir
+		(
+			cd /opt/86box
+			"$file" --appimage-extract >/dev/null
+		)
+		if [[ ! -x /opt/86box/squashfs-root/AppRun ]]; then
+			log "86Box AppImage extraction failed (AppRun missing)."
+			rm -f "$file"
+			return 1
+		fi
+		mv /opt/86box/squashfs-root /opt/86box/86box-appdir
+		cat > /usr/local/bin/86Box <<'EOF'
+#!/usr/bin/env bash
+exec /opt/86box/86box-appdir/AppRun "$@"
+EOF
+		chmod +x /usr/local/bin/86Box
 	fi
 	rm -f "$file" || true
 }
