@@ -1,4 +1,4 @@
-# Sphere86 v2
+# Sphere86
 
 A central orchestrator for retro PC emulation with **86Box** and **Sunshine / Moonlight** streaming.
 
@@ -9,8 +9,9 @@ Sphere86 provides a web interface to create and manage 86Box machine configurati
 ```
 Browser  ──>  Sphere86 (SvelteKit, Docker)
                 │
-                ├── SQLite database (under `/data`)
-                ├── Writes configs and VM files under `/data`
+                ├── SQLite + app state under `/data/sphere86`
+                ├── Sunshine config under `/data/sunshine`
+                ├── 86Box VMs + ROMs under `/data/86box`
                 └── Sunshine REST API
                      ├── External host mode (VM/workstation), or
                      └── Embedded single-image mode (same container)
@@ -47,7 +48,14 @@ Then:
 docker compose up -d
 ```
 
-The compose file maps `${SPHERE86_DATA_DIR}` to `/data` in the container. If `SPHERE86_DATA_DIR` is unset, the default placeholder path in `docker-compose.yml` must be replaced before the stack will start.
+The compose file maps `${SPHERE86_DATA_DIR}` to `/data` in the container.  
+Inside that path, Sphere86 uses:
+
+- `/data/sphere86` app database/logs/cache
+- `/data/sunshine` Sunshine config and credentials
+- `/data/86box` VM configs and ROM storage
+
+`docker-compose.yml` uses `network_mode: bridge` for the single service, so no extra project-scoped compose network is created.
 
 Open `http://localhost:3000` and sign in with **admin** / **sphere86** (change the password when prompted).
 
@@ -61,7 +69,8 @@ This repository now supports running the full stack in one container:
 - Xvfb + lightweight X session (Openbox, software rendering)
 
 `docker-compose.yml` is preconfigured for this mode (`privileged: true` and Sunshine ports exposed).  
-The container bootstrap creates/updates an **embedded managed host** in Sphere86 automatically and points it to `127.0.0.1:47990`.
+The container bootstrap creates/updates an **embedded managed host** in Sphere86 automatically.
+Internally it targets `127.0.0.1:47990` for API calls, while the web link shown in Sphere86 can use your request host/IP.
 
 Important:
 
@@ -99,9 +108,9 @@ npm run dev
 | Variable | Typical value | Description |
 |----------|----------------|-------------|
 | `SPHERE86_SECRET` | 32+ random characters | Encrypts stored Sunshine and related credentials |
-| `DATABASE_URL` | `file:/data/config/sphere86.db` (Docker) or `file:./data/config/sphere86.db` (dev) | SQLite database file |
-| `SPHERE86_DATA_ROOT` | `/data` | Local runtime root for configs, VMs, logs and cache |
-| `BOX86_CONFIG_BASE_PATH` | `/data` | Base path where `vms/<uuid>/86box.cfg` is written |
+| `DATABASE_URL` | `file:/data/sphere86/config/sphere86.db` (Docker) or `file:./data/sphere86/config/sphere86.db` (dev) | SQLite database file |
+| `SPHERE86_DATA_ROOT` | `/data/sphere86` | Sphere86 app runtime root for DB/logs/cache |
+| `BOX86_CONFIG_BASE_PATH` | `/data/86box` | Base path where `vms/<uuid>/86box.cfg` is written |
 | `BOX86_BINARY_PATH` | `/usr/local/bin/86Box` | 86Box binary used when publishing to Sunshine |
 | `BOX86_ROMS_PATH` | `/opt/86box/roms` | Standard ROM directory passed to 86Box (`-R`) |
 | `PORT` | `3000` | HTTP port |
@@ -116,8 +125,11 @@ Additional embedded-mode variables:
 | `SPHERE86_EMBEDDED_HOST` | `true` | Enables managed local streaming host bootstrap |
 | `SPHERE86_EMBEDDED_HOST_NAME` | `Embedded Local Host` | Name shown in the Hosts page |
 | `SPHERE86_EMBEDDED_HOST_ADDRESS` | `127.0.0.1` | Local Sunshine API endpoint inside container |
+| `SPHERE86_EMBEDDED_HOST_PUBLIC_ADDRESS` | empty | Optional public/UI address override shown for embedded host links |
 | `SPHERE86_EMBEDDED_HOST_PORT` | `47990` | Sunshine API / Web UI port |
-| `SPHERE86_EMBEDDED_SUNSHINE_SCHEME` | `http` | `http`, `https`, or `auto` |
+| `SPHERE86_EMBEDDED_SUNSHINE_SCHEME` | `auto` | `http`, `https`, or `auto` |
+| `SUNSHINE_CONFIG_BASE_PATH` | `/data/sunshine` | Persistent Sunshine config root |
+| `SUNSHINE_STREAM_PORT` | `47989` | Moonlight streaming/discovery port base written into Sunshine config |
 | `SUNSHINE_WEB_USERNAME` | `admin` | Initial Sunshine Web UI user |
 | `SUNSHINE_WEB_PASSWORD` | `sunshine` | Initial Sunshine Web UI password |
 | `SUNSHINE_INSTALL_METHOD` | `auto` | `auto` tries `.deb` first then AppImage fallback; `deb` or `appimage` force method |
@@ -128,8 +140,9 @@ Additional embedded-mode variables:
 
 Embedded mode ports:
 
-- `47990/tcp` Sunshine API/runtime config (used by Sphere86 managed host integration)
-- `47991/tcp` Sunshine configuration Web UI (HTTPS)
+- `3000/tcp` Sphere86 web UI/API
+- `47990/tcp` Sunshine API/Web UI (HTTPS)
+- `47984/tcp+udp`, `47989/tcp+udp`, `48010/tcp`, `47998-48010/udp` Moonlight streaming/discovery
 
 ## Streaming host setup
 

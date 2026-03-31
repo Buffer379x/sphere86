@@ -38,7 +38,7 @@ export const streamingHosts = sqliteTable('streaming_hosts', {
 	tlsVerify: integer('tls_verify', { mode: 'boolean' }).notNull().default(false),
 	/** API/Web UI: auto = try HTTPS then HTTP */
 	sunshineScheme: text('sunshine_scheme').notNull().default('auto'),
-	configBasePath: text('config_base_path').notNull().default('/opt/86box/configs'),
+	configBasePath: text('config_base_path').notNull().default('/data/86box'),
 	binaryPath: text('binary_path').notNull().default('/usr/local/bin/86Box'),
 	/** X11 display for 86Box + must match Sunshine (e.g. :0 or :2.0 from `echo $DISPLAY` on the host). */
 	x11Display: text('x11_display').notNull().default(':0'),

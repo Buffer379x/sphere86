@@ -7,7 +7,7 @@ import { mkdirSync } from 'fs';
 import { dirname, join } from 'path';
 import { SPHERE86_DATA_ROOT } from '$lib/server/runtime-paths.js';
 
-const dbPath = (env.DATABASE_URL || 'file:./data/config/sphere86.db').replace('file:', '');
+const dbPath = (env.DATABASE_URL || 'file:./data/sphere86/config/sphere86.db').replace('file:', '');
 const dataRoot = SPHERE86_DATA_ROOT;
 
 // Ensure standard folder structure

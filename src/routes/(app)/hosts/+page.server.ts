@@ -16,26 +16,52 @@ import { logAudit } from '$lib/server/audit.js';
 import { v4 as uuid } from 'uuid';
 import { isIPv6 } from 'node:net';
 import { BOX86_BINARY_PATH, BOX86_CONFIG_BASE_PATH } from '$lib/server/runtime-paths.js';
+import { env } from '$env/dynamic/private';
 
 /** Browser link: explicit HTTPS/HTTP; Auto uses HTTP (typical LAN Sunshine without TLS). */
 function schemeForOpenLink(scheme: SunshineScheme): 'http' | 'https' {
 	if (scheme === 'https') return 'https';
 	if (scheme === 'http') return 'http';
-	return 'http';
+	// Sunshine Web UI is typically served with HTTPS on embedded setups.
+	return 'https';
 }
 
-function buildSunshineOpenUrl(host: { address: string; port: number; sunshineScheme?: string | null }): string {
-	const raw = host.address.trim();
+function sanitizeHostHeaderAddress(hostHeader: string | null): string | null {
+	if (!hostHeader) return null;
+	const value = hostHeader.trim();
+	if (!value) return null;
+	if (value.startsWith('[')) {
+		const idx = value.indexOf(']');
+		return idx > 0 ? value.slice(1, idx) : null;
+	}
+	return value.split(':')[0] || null;
+}
+
+function buildSunshineOpenUrl(
+	host: { address: string; port: number; sunshineScheme?: string | null; managed?: boolean; managedKind?: string },
+	hostHeader: string | null
+): string {
+	const embeddedPublicAddress =
+		env.SPHERE86_EMBEDDED_HOST_PUBLIC_ADDRESS?.trim() ||
+		env.SPHERE86_EMBEDDED_PUBLIC_ADDRESS?.trim() ||
+		null;
+	const fallbackRequestAddress = sanitizeHostHeaderAddress(hostHeader);
+	const addressCandidate =
+		host.managed && host.managedKind === 'embedded' && host.address === '127.0.0.1'
+			? embeddedPublicAddress || fallbackRequestAddress || host.address
+			: host.address;
+	const raw = addressCandidate.trim();
 	const hostname = isIPv6(raw) ? `[${raw}]` : raw;
 	const sch = schemeForOpenLink(parseSunshineScheme(host.sunshineScheme));
 	return `${sch}://${hostname}:${host.port}/`;
 }
 
-export const load: PageServerLoad = async () => {
+export const load: PageServerLoad = async ({ request }) => {
+	const hostHeader = request.headers.get('x-forwarded-host') || request.headers.get('host');
 	const rows = await db.select().from(streamingHosts).all();
 	const hosts = rows.map((h) => ({
 		...h,
-		sunshineOpenUrl: buildSunshineOpenUrl(h)
+		sunshineOpenUrl: buildSunshineOpenUrl(h, hostHeader)
 	}));
 	return { hosts };
 };

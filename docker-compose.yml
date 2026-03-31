@@ -5,6 +5,7 @@ services:
     container_name: sphere86
     restart: unless-stopped
     privileged: true
+    network_mode: bridge
     shm_size: "1gb"
     ports:
       - "3000:3000"
@@ -18,8 +19,8 @@ services:
       - "47998-48010:47998-48010/udp"
     environment:
       - SPHERE86_SECRET=${SPHERE86_SECRET:-change-me-in-production}
-      - DATABASE_URL=file:/data/config/sphere86.db
-      - SPHERE86_DATA_ROOT=/data
+      - DATABASE_URL=file:/data/sphere86/config/sphere86.db
+      - SPHERE86_DATA_ROOT=/data/sphere86
       - NODE_ENV=production
       - SPHERE86_SINGLE_IMAGE_MODE=true
       - SPHERE86_EMBEDDED_HOST=true
@@ -27,10 +28,11 @@ services:
       - SPHERE86_EMBEDDED_HOST_ADDRESS=127.0.0.1
       - SPHERE86_EMBEDDED_HOST_PORT=47990
       - SPHERE86_EMBEDDED_SUNSHINE_SCHEME=auto
-      - SPHERE86_EMBEDDED_CONFIG_BASE_PATH=/data
+      - SPHERE86_EMBEDDED_CONFIG_BASE_PATH=/data/86box
       - SPHERE86_EMBEDDED_86BOX_BINARY_PATH=/usr/local/bin/86Box
       - SPHERE86_EMBEDDED_X11_DISPLAY=:0
-      - BOX86_CONFIG_BASE_PATH=/data
+      - SUNSHINE_CONFIG_BASE_PATH=/data/sunshine
+      - BOX86_CONFIG_BASE_PATH=/data/86box
       - BOX86_BINARY_PATH=/usr/local/bin/86Box
       - BOX86_ROMS_PATH=/opt/86box/roms
       - SUNSHINE_STREAM_PORT=47989

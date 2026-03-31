@@ -41,7 +41,7 @@ export function migrate(sqlite: Database.Database) {
 			credential_encrypted TEXT NOT NULL DEFAULT '',
 			tls_verify INTEGER NOT NULL DEFAULT 0,
 			sunshine_scheme TEXT NOT NULL DEFAULT 'auto',
-			config_base_path TEXT NOT NULL DEFAULT '/opt/86box/configs',
+			config_base_path TEXT NOT NULL DEFAULT '/data/86box',
 			binary_path TEXT NOT NULL DEFAULT '/usr/local/bin/86Box',
 			status TEXT NOT NULL DEFAULT 'unknown',
 			sunshine_version TEXT,

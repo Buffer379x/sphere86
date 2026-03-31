@@ -7,7 +7,9 @@ BOX_USER="${BOX_USER:-sphere86}"
 BOX_HOME="/home/${BOX_USER}"
 DISPLAY_VAL="${SPHERE86_EMBEDDED_X11_DISPLAY:-:0}"
 SUNSHINE_STREAM_PORT="${SUNSHINE_STREAM_PORT:-47989}"
-CONFIG_BASE="${SPHERE86_EMBEDDED_CONFIG_BASE_PATH:-/data}"
+APP_DATA_ROOT="${SPHERE86_DATA_ROOT:-/data/sphere86}"
+CONFIG_BASE="${SPHERE86_EMBEDDED_CONFIG_BASE_PATH:-/data/86box}"
+SUNSHINE_CONFIG_BASE="${SUNSHINE_CONFIG_BASE_PATH:-/data/sunshine}"
 ROMS_PATH="${BOX86_ROMS_PATH:-/opt/86box/roms}"
 BOX86_BINARY_PATH="${BOX86_BINARY_PATH:-/usr/local/bin/86Box}"
 SUNSHINE_UI_USER="${SUNSHINE_WEB_USERNAME:-admin}"
@@ -15,7 +17,7 @@ SUNSHINE_UI_PASS="${SUNSHINE_WEB_PASSWORD:-sunshine}"
 SUNSHINE_INSTALL_METHOD="${SUNSHINE_INSTALL_METHOD:-auto}" # auto|deb|appimage
 GITHUB_API_TOKEN="${GITHUB_API_TOKEN:-${GITHUB_TOKEN:-}}"
 
-SUNSHINE_URL_CACHE_DIR="${CONFIG_BASE}/cache/sunshine"
+SUNSHINE_URL_CACHE_DIR="${APP_DATA_ROOT}/cache/sunshine"
 SUNSHINE_DEB_URL_CACHE="${SUNSHINE_URL_CACHE_DIR}/deb-url.txt"
 SUNSHINE_APPIMAGE_URL_CACHE="${SUNSHINE_URL_CACHE_DIR}/appimage-url.txt"
 
@@ -258,7 +260,9 @@ ensure_user() {
 		log "Creating user ${BOX_USER}."
 		useradd -m -s /bin/bash -G "$group_csv" "$BOX_USER"
 	fi
-	mkdir -p "${BOX_HOME}/.config/sunshine" "${BOX_HOME}/.cache"
+	mkdir -p "${BOX_HOME}/.config" "${BOX_HOME}/.cache"
+	rm -rf "${BOX_HOME}/.config/sunshine"
+	ln -sfn "${SUNSHINE_CONFIG_BASE}/config" "${BOX_HOME}/.config/sunshine"
 	chown -R "${BOX_USER}:${BOX_USER}" "${BOX_HOME}"
 }
 
@@ -298,9 +302,13 @@ ensure_sunshine_runtime_compat() {
 
 prepare_data_layout() {
 	log "Preparing /data layout."
-	mkdir -p "${CONFIG_BASE}" "${CONFIG_BASE}/config" "${CONFIG_BASE}/vms" "${CONFIG_BASE}/roms" "${CONFIG_BASE}/cache"
+	mkdir -p "${APP_DATA_ROOT}/config" "${APP_DATA_ROOT}/logs" "${APP_DATA_ROOT}/cache"
+	mkdir -p "${SUNSHINE_CONFIG_BASE}/config"
+	mkdir -p "${CONFIG_BASE}" "${CONFIG_BASE}/vms" "${CONFIG_BASE}/roms"
 	mkdir -p "$(dirname "${ROMS_PATH}")"
 	ln -sfn "${CONFIG_BASE}/roms" "${ROMS_PATH}"
+	chown -R "${BOX_USER}:${BOX_USER}" "${APP_DATA_ROOT}" || true
+	chown -R "${BOX_USER}:${BOX_USER}" "${SUNSHINE_CONFIG_BASE}" || true
 	chown -R "${BOX_USER}:${BOX_USER}" "${CONFIG_BASE}" || true
 }
 

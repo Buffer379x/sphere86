@@ -1,25 +1,42 @@
 <?xml version="1.0"?>
 <Container version="2">
   <Name>sphere86</Name>
-  <Repository>ghcr.io/OWNER/sphere86:latest</Repository>
+  <Repository>ghcr.io/buffer379x/sphere86:[BRANCH]</Repository>
   <Registry>https://ghcr.io</Registry>
+  <Icon>https://raw.githubusercontent.com/buffer379x/sphere86/main/static/logo.png</Icon>
   <Network>bridge</Network>
   <Shell>sh</Shell>
-  <Privileged>false</Privileged>
-  <Support>https://github.com/OWNER/sphere86/issues</Support>
-  <Project>https://github.com/OWNER/sphere86</Project>
+  <Privileged>true</Privileged>
+  <Support>https://github.com/buffer379x/sphere86/issues</Support>
+  <Project>https://github.com/buffer379x/sphere86</Project>
   <Overview>
-    Sphere86: web UI for 86Box configs and Sunshine publishing. Replace OWNER with your GitHub user or organization in Repository and TemplateURL, or point Repository to any image built from this repo.
-    Map a host folder to /data for SQLite, generated configs, and VM data. Set SPHERE86_SECRET to a stable random value of at least 32 characters.
+    Sphere86: web UI for 86Box configs and Sunshine publishing with embedded Sunshine + 86Box runtime.
+    Configure separate persistent paths for Sphere86 (/data/sphere86), Sunshine (/data/sunshine), and 86Box (/data/86box).
+    Set SPHERE86_SECRET to a stable random value of at least 32 characters.
   </Overview>
   <Category>Productivity: Tools</Category>
   <WebUI>http://[IP]:[PORT:3000]/</WebUI>
-  <TemplateURL>https://raw.githubusercontent.com/OWNER/sphere86/main/tools/unraid/sphere86.xml</TemplateURL>
-  <Config Name="Web UI" Target="3000" Default="3000" Mode="tcp" Description="HTTP port for Sphere86" Type="Port" Display="always" Required="true" Mask="false"/>
-  <Config Name="Data" Target="/data" Default="/mnt/user/appdata/sphere86" Mode="rw" Description="Persistent storage: database under /data/config, VM files under /data/vms, etc." Type="Path" Display="always" Required="true" Mask="false"/>
+  <TemplateURL>https://raw.githubusercontent.com/buffer379x/sphere86/main/tools/unraid/sphere86.xml</TemplateURL>
+  <Config Name="BRANCH" Target="BRANCH" Default="latest" Description="Image tag: latest (stable), beta, or a version tag (e.g. v1.1.0-beta)" Type="Variable" Display="always" Required="true" Mask="false"/>
+  <Config Name="Sphere86 Web UI Port" Target="3000" Default="3000" Mode="tcp" Description="HTTP port for Sphere86 web UI" Type="Port" Display="always" Required="true" Mask="false"/>
+  <Config Name="Sunshine API/Web UI Port" Target="47990" Default="47990" Mode="tcp" Description="Sunshine API + HTTPS Web UI port" Type="Port" Display="always" Required="true" Mask="false"/>
+  <Config Name="Sunshine Stream Port (TCP)" Target="47989" Default="47989" Mode="tcp" Description="Sunshine stream/session TCP port" Type="Port" Display="always" Required="true" Mask="false"/>
+  <Config Name="Sunshine Discovery Port (TCP/UDP)" Target="47984" Default="47984" Mode="tcp" Description="Sunshine discovery TCP port" Type="Port" Display="advanced" Required="true" Mask="false"/>
+  <Config Name="Sunshine Discovery Port (UDP)" Target="47984" Default="47984" Mode="udp" Description="Sunshine discovery UDP port" Type="Port" Display="advanced" Required="true" Mask="false"/>
+  <Config Name="Sunshine Stream Port (UDP)" Target="47989" Default="47989" Mode="udp" Description="Sunshine stream/session UDP port" Type="Port" Display="advanced" Required="true" Mask="false"/>
+  <Config Name="Sunshine Control Port" Target="48010" Default="48010" Mode="tcp" Description="Sunshine control TCP port" Type="Port" Display="advanced" Required="true" Mask="false"/>
+  <Config Name="Sphere86 Data" Target="/data/sphere86" Default="/mnt/user/appdata/sphere86/sphere86" Mode="rw" Description="Persistent Sphere86 app data (DB/logs/cache)" Type="Path" Display="always" Required="true" Mask="false"/>
+  <Config Name="Sunshine Data" Target="/data/sunshine" Default="/mnt/user/appdata/sphere86/sunshine" Mode="rw" Description="Persistent Sunshine config and credentials" Type="Path" Display="always" Required="true" Mask="false"/>
+  <Config Name="86Box Data" Target="/data/86box" Default="/mnt/user/appdata/sphere86/86box" Mode="rw" Description="Persistent 86Box VMs and ROM store" Type="Path" Display="always" Required="true" Mask="false"/>
   <Config Name="SPHERE86_SECRET" Target="SPHERE86_SECRET" Default="" Description="Credential encryption key (min 32 characters). Keep the same value across upgrades." Type="Variable" Display="always" Required="true" Mask="true"/>
-  <Config Name="DATABASE_URL" Target="DATABASE_URL" Default="file:/data/config/sphere86.db" Description="SQLite file inside the container" Type="Variable" Display="advanced" Required="false" Mask="false"/>
-  <Config Name="SHARE_ROOT" Target="SHARE_ROOT" Default="/data" Description="Must stay /data when using the Data path mapping above" Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="DATABASE_URL" Target="DATABASE_URL" Default="file:/data/sphere86/config/sphere86.db" Description="SQLite file for Sphere86" Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="SPHERE86_DATA_ROOT" Target="SPHERE86_DATA_ROOT" Default="/data/sphere86" Description="Sphere86 app data root" Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="BOX86_CONFIG_BASE_PATH" Target="BOX86_CONFIG_BASE_PATH" Default="/data/86box" Description="86Box config base path used by publish/deploy" Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="BOX86_ROMS_PATH" Target="BOX86_ROMS_PATH" Default="/opt/86box/roms" Description="ROM path passed to 86Box (-R). Kept persistent via /data/86box/roms symlink." Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="SPHERE86_EMBEDDED_CONFIG_BASE_PATH" Target="SPHERE86_EMBEDDED_CONFIG_BASE_PATH" Default="/data/86box" Description="Embedded 86Box path for generated VM configs" Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="SPHERE86_EMBEDDED_HOST_PORT" Target="SPHERE86_EMBEDDED_HOST_PORT" Default="47990" Description="Embedded Sunshine API/WebUI port used by Sphere86" Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="SUNSHINE_STREAM_PORT" Target="SUNSHINE_STREAM_PORT" Default="47989" Description="Sunshine stream/discovery base port written into sunshine.conf" Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="SPHERE86_EMBEDDED_HOST_PUBLIC_ADDRESS" Target="SPHERE86_EMBEDDED_HOST_PUBLIC_ADDRESS" Default="" Description="Optional public IP/hostname shown in embedded Sunshine links (leave empty to use request host)." Type="Variable" Display="advanced" Required="false" Mask="false"/>
   <Config Name="NODE_ENV" Target="NODE_ENV" Default="production" Description="Node environment" Type="Variable" Display="advanced-hide" Required="false" Mask="false"/>
   <Config Name="PORT" Target="PORT" Default="3000" Description="Internal HTTP port (match Web UI port)" Type="Variable" Display="advanced" Required="false" Mask="false"/>
   <Config Name="HOST" Target="HOST" Default="0.0.0.0" Description="Bind address inside container" Type="Variable" Display="advanced-hide" Required="false" Mask="false"/>
